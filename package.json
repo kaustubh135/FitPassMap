@@ -1,0 +1,27 @@
+{
+  "name": "fitpass-map-explorer",
+  "version": "1.0.0",
+  "description": "Interactive map and directory for Fitpass gyms near Oberoi Mall, Goregaon East and across India",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "serve:py": "python server.py",
+    "data:fetch": "node scripts/fetch_studios.js",
+    "data:enrich": "node scripts/enrich_studios.js",
+    "data:prepare": "node scripts/prepare_data.js",
+    "data:refresh": "node scripts/update_all.js"
+  },
+  "keywords": [
+    "fitpass",
+    "gym-locator",
+    "map",
+    "fitness",
+    "leaflet",
+    "mumbai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  }
+}

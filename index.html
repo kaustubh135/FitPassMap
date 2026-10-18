@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FitPass Gym Map Explorer | Oberoi Mall & Beyond</title>
+  <meta name="description" content="Interactive map of all Fitpass gyms near Oberoi Mall, Goregaon East and across India with live filters, ratings, amenities, and workout types.">
+  <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
+  <link rel="icon" type="image/png" href="https://cdn.fitimg.in/studio_logo_63AA4A977C3235.png">
+
+  <!-- Google Fonts: Figtree -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- App Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <a href="#" class="logo-badge">
+        <span class="fitpass-logo">FITPASS</span>
+        <h1 class="brand-title">Map Explorer <span>• Oberoi Mall</span></h1>
+      </a>
+      <div class="location-indicator" title="Your reference location from search query">
+        <span class="pulsing-dot"></span>
+        <span id="refLocationLabel">Oberoi Mall, Goregaon East</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <span class="stats-pill" id="headerCounterBadge">Loading gyms...</span>
+      <button class="btn-icon" id="recenterBtn" title="Center map to my search location">
+        <i class="fa-solid fa-location-crosshairs"></i>
+      </button>
+      <button class="btn-icon" id="toggleTileLayerBtn" title="Toggle Map Style (Street / Minimal / Dark)">
+        <i class="fa-solid fa-layer-group"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container show-list" id="appContainer">
+    
+    <!-- Sidebar: Search, Filters & Studio Cards -->
+    <aside class="sidebar">
+      <!-- Filter Panel -->
+      <div class="filter-panel">
+        <!-- Search Input -->
+        <div class="search-box">
+          <i class="fa-solid fa-magnifying-glass search-icon"></i>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search gym name, locality, address, or activity..." autocomplete="off">
+          <button class="clear-search-btn" id="clearSearchBtn" title="Clear search">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Distance Quick Filter -->
+        <div class="distance-row">
+          <div class="distance-presets" id="distancePresets">
+            <button class="dist-pill" data-distance="2">&lt; 2 km</button>
+            <button class="dist-pill active" data-distance="5">&lt; 5 km</button>
+            <button class="dist-pill" data-distance="10">&lt; 10 km</button>
+            <button class="dist-pill" data-distance="25">&lt; 25 km</button>
+            <button class="dist-pill" data-distance="all">All India</button>
+          </div>
+        </div>
+
+        <!-- Filter Action Tabs -->
+        <div class="filter-tabs">
+          <button class="filter-btn" id="toggleFiltersDrawerBtn">
+            <i class="fa-solid fa-sliders"></i>
+            <span>Filters</span>
+            <span class="badge" id="activeFilterBadge" style="display: none;">0</span>
+          </button>
+
+          <button class="filter-btn" id="ratingFilterBtn">
+            <i class="fa-solid fa-star text-amber-500"></i>
+            <span>Rating 4.0+</span>
+          </button>
+
+          <button class="filter-btn" id="verifiedFilterBtn">
+            <i class="fa-solid fa-circle-check text-blue-500"></i>
+            <span>Verified</span>
+          </button>
+
+          <button class="filter-btn" id="openNowFilterBtn">
+            <i class="fa-solid fa-clock"></i>
+            <span>Open Now</span>
+          </button>
+
+          <button class="filter-btn" id="resetFiltersBtn" style="display: none; color: var(--primary);" title="Reset all filters">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <!-- Expandable Drawer for Detailed Filters -->
+        <div class="filters-drawer" id="filtersDrawer">
+          
+          <!-- Distance Range Slider -->
+          <div>
+            <div class="filter-section-title" style="display: flex; justify-content: space-between;">
+              <span>Max Distance Radius</span>
+              <span id="sliderDistanceVal" style="color: var(--primary); font-weight: 700;">5 km</span>
+            </div>
+            <input type="range" id="distanceRangeSlider" min="1" max="50" value="5" step="1" style="width: 100%; accent-color: var(--primary); cursor: pointer;">
+          </div>
+
+          <!-- Workout Types Filter -->
+          <div>
+            <div class="filter-section-title">Workout Activities (FitPass Categories)</div>
+            <div class="chips-cloud" id="workoutChipsContainer">
+              <!-- Workout chips will be rendered here dynamically -->
+            </div>
+          </div>
+
+          <!-- Amenities Filter -->
+          <div>
+            <div class="filter-section-title">Amenities & Facilities</div>
+            <div class="chips-cloud" id="amenityChipsContainer">
+              <!-- Amenity chips rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- List Summary Bar -->
+      <div class="list-summary-bar">
+        <span id="resultsCountLabel">Showing 0 gyms</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label for="sortSelect" style="color: var(--text-muted);">Sort:</label>
+          <select id="sortSelect" class="sort-select">
+            <option value="distance_asc">Nearest (Distance)</option>
+            <option value="rating_desc">Highest Rated</option>
+            <option value="reviews_desc">Most Reviews</option>
+            <option value="name_asc">Name (A-Z)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Studios List -->
+      <div class="studios-list" id="studiosList">
+        <!-- Studio Cards will be inserted here dynamically -->
+      </div>
+    </aside>
+
+    <!-- Map Container -->
+    <section class="map-container">
+      <div id="map"></div>
+
+      <!-- Floating Map Controls -->
+      <div class="map-floating-controls">
+        <button class="map-control-btn" id="mapFitBoundsBtn" title="Fit map to show all currently filtered gyms">
+          <i class="fa-solid fa-expand"></i>
+          <span>Fit Results</span>
+        </button>
+        <button class="map-control-btn" id="mapCenterMeBtn" title="Center on Oberoi Mall">
+          <i class="fa-solid fa-location-dot" style="color: #2563EB;"></i>
+          <span>Oberoi Mall</span>
+        </button>
+      </div>
+
+      <!-- Map Legend -->
+      <div class="map-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #2563EB;"></div>
+          <span>You (Oberoi Mall)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #D6383B;"></div>
+          <span>FitPass Gym</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Mobile View Toggle Floating Pill -->
+  <div class="mobile-view-toggle">
+    <button id="mobileShowListBtn" class="active">
+      <i class="fa-solid fa-list"></i> List (<span id="mobileCount">0</span>)
+    </button>
+    <button id="mobileShowMapBtn">
+      <i class="fa-solid fa-map"></i> Map
+    </button>
+  </div>
+
+  <!-- Studio Details Modal Backdrop -->
+  <div class="modal-backdrop" id="studioModalBackdrop">
+    <div class="modal-content" id="studioModalContent">
+      <div class="modal-header">
+        <img src="" alt="Studio Banner" class="modal-banner-img" id="modalBannerImg">
+        <button class="modal-close-btn" id="modalCloseBtn" aria-label="Close modal">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <img src="" alt="Studio Logo" class="modal-logo-badge" id="modalLogoImg">
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-title-row">
+          <div>
+            <h2 class="modal-title" id="modalStudioName">Studio Name</h2>
+            <div class="modal-address" id="modalStudioAddress">
+              <i class="fa-solid fa-location-dot" style="color: var(--primary); margin-top: 2px;"></i>
+              <span id="modalAddressText">Studio Address Line</span>
+            </div>
+          </div>
+          <button class="btn-icon" id="copyAddressBtn" title="Copy full address">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        </div>
+
+        <div class="modal-badges-row" id="modalBadgesRow">
+          <!-- Badges for distance, rating, verified, timing rendered here -->
+        </div>
+
+        <!-- Amenities Section -->
+        <div class="modal-section" id="modalAmenitiesSection">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-cube"></i> Available Amenities
+          </div>
+          <div class="amenities-grid" id="modalAmenitiesGrid">
+            <!-- Amenities cards -->
+          </div>
+        </div>
+
+        <!-- Workouts Section -->
+        <div class="modal-section">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-dumbbell"></i> Workout Activities Available
+          </div>
+          <div class="chips-cloud" id="modalWorkoutsList">
+            <!-- Workout pills -->
+          </div>
+        </div>
+
+        <!-- About Section -->
+        <div class="modal-section" id="modalAboutSection">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-circle-info"></i> About the Studio
+          </div>
+          <p class="modal-about-text" id="modalAboutText">Studio description...</p>
+        </div>
+
+        <!-- Photo Gallery -->
+        <div class="modal-section" id="modalGallerySection">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-images"></i> Photo Gallery
+          </div>
+          <div class="gallery-grid" id="modalGalleryGrid">
+            <!-- Gallery images -->
+          </div>
+        </div>
+
+        <!-- Reviews Section -->
+        <div class="modal-section" id="modalReviewsSection">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-comment-dots"></i> Member Reviews
+          </div>
+          <div class="reviews-list" id="modalReviewsList">
+            <!-- Reviews -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <a href="#" target="_blank" rel="noopener noreferrer" class="btn-primary" id="modalFitpassLink">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          <span>View on FITPASS</span>
+        </a>
+        <a href="#" target="_blank" rel="noopener noreferrer" class="btn-outline" id="modalGoogleMapsLink">
+          <i class="fa-solid fa-diamond-turn-right"></i>
+          <span>Google Maps Directions</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Leaflet MarkerCluster JS -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Load Studios Dataset -->
+  <script src="studios_data.js"></script>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
