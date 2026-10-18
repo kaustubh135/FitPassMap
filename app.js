@@ -20,7 +20,7 @@
   // Filter States
   const filterState = {
     search: '',
-    maxDistance: 5, // default 5 km (nearby Oberoi Mall)
+    maxDistance: 5, // default 5 km from active location
     rating4Plus: false,
     verifiedOnly: false,
     openNowOnly: false,
@@ -29,8 +29,31 @@
     sortBy: 'distance_asc'
   };
 
-  // Reference Location (Oberoi Mall, Goregaon East)
-  const REF_COORDS = [19.1742, 72.86041];
+  // Dynamic User Location State
+  let userCoords = [19.0760, 72.8777]; // Fallback placeholder: Mumbai
+  let userLocationName = 'Detecting location...';
+  let isLocationSet = false;
+
+  // Popular Location Hubs across India
+  const POPULAR_LOCATIONS = [
+    { name: 'Bandra West', city: 'Mumbai', lat: 19.0596, lng: 72.8295 },
+    { name: 'Goregaon (Oberoi)', city: 'Mumbai', lat: 19.1742, lng: 72.8604 },
+    { name: 'Andheri West', city: 'Mumbai', lat: 19.1364, lng: 72.8296 },
+    { name: 'Powai', city: 'Mumbai', lat: 19.1176, lng: 72.9060 },
+    { name: 'Thane West', city: 'Mumbai MMR', lat: 19.2183, lng: 72.9781 },
+    { name: 'Connaught Place', city: 'Delhi', lat: 28.6315, lng: 77.2167 },
+    { name: 'Saket', city: 'South Delhi', lat: 28.5244, lng: 77.2167 },
+    { name: 'Cyber City', city: 'Gurugram', lat: 28.4950, lng: 77.0895 },
+    { name: 'Sector 18', city: 'Noida', lat: 28.5708, lng: 77.3260 },
+    { name: 'Indiranagar', city: 'Bengaluru', lat: 12.9784, lng: 77.6408 },
+    { name: 'Koramangala', city: 'Bengaluru', lat: 12.9352, lng: 77.6245 },
+    { name: 'Whitefield', city: 'Bengaluru', lat: 12.9698, lng: 77.7499 },
+    { name: 'Koregaon Park', city: 'Pune', lat: 18.5362, lng: 73.8940 },
+    { name: 'Hinjawadi IT Park', city: 'Pune', lat: 18.5913, lng: 73.7389 },
+    { name: 'Hitec City', city: 'Hyderabad', lat: 17.4435, lng: 78.3772 },
+    { name: 'T. Nagar', city: 'Chennai', lat: 13.0418, lng: 80.2341 },
+    { name: 'Salt Lake', city: 'Kolkata', lat: 22.5867, lng: 88.4178 }
+  ];
 
   // Tile Providers (100% Free, No API key needed, Universal compatibility)
   const TILE_STYLES = [
@@ -104,6 +127,9 @@
     sortSelect: document.getElementById('sortSelect'),
     resultsCountLabel: document.getElementById('resultsCountLabel'),
     headerCounterBadge: document.getElementById('headerCounterBadge'),
+    changeLocationBtn: document.getElementById('changeLocationBtn'),
+    refLocationLabel: document.getElementById('refLocationLabel'),
+    legendUserLabel: document.getElementById('legendUserLabel'),
     recenterBtn: document.getElementById('recenterBtn'),
     mapCenterMeBtn: document.getElementById('mapCenterMeBtn'),
     mapFitBoundsBtn: document.getElementById('mapFitBoundsBtn'),
@@ -113,7 +139,18 @@
     mobileShowListBtn: document.getElementById('mobileShowListBtn'),
     mobileShowMapBtn: document.getElementById('mobileShowMapBtn'),
     mobileCount: document.getElementById('mobileCount'),
-    // Modal Elements
+    // Location Modal Elements
+    locationModalBackdrop: document.getElementById('locationModalBackdrop'),
+    locationModalCloseBtn: document.getElementById('locationModalCloseBtn'),
+    useGpsBtn: document.getElementById('useGpsBtn'),
+    locationNotice: document.getElementById('locationNotice'),
+    locationNoticeText: document.getElementById('locationNoticeText'),
+    locationSearchInput: document.getElementById('locationSearchInput'),
+    clearLocationSearchBtn: document.getElementById('clearLocationSearchBtn'),
+    submitLocationSearchBtn: document.getElementById('submitLocationSearchBtn'),
+    locationResultsList: document.getElementById('locationResultsList'),
+    popularLocationsGrid: document.getElementById('popularLocationsGrid'),
+    // Studio Modal Elements
     studioModalBackdrop: document.getElementById('studioModalBackdrop'),
     modalCloseBtn: document.getElementById('modalCloseBtn'),
     modalBannerImg: document.getElementById('modalBannerImg'),
@@ -143,8 +180,9 @@
     loadData();
     initMap();
     initFiltersUI();
+    initLocationModal();
     bindEvents();
-    applyFilters();
+    initUserLocation();
   }
 
   /**
@@ -178,8 +216,8 @@
    */
   function initMap() {
     map = L.map('map', {
-      center: REF_COORDS,
-      zoom: 14,
+      center: userCoords,
+      zoom: 13,
       zoomControl: true,
       maxZoom: 19,
       minZoom: 4
@@ -211,7 +249,7 @@
     // Add Native Leaflet Layer Switcher Control
     L.control.layers(baseLayersMap, null, { position: 'topright', collapsed: true }).addTo(map);
 
-    // User Beacon Marker (Oberoi Mall)
+    // User Beacon Marker
     const userIcon = L.divIcon({
       className: 'user-marker-icon',
       html: '<div class="user-beacon"></div>',
@@ -219,13 +257,13 @@
       iconAnchor: [12, 12]
     });
 
-    userMarker = L.marker(REF_COORDS, { icon: userIcon, zIndexOffset: 2000 })
+    userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 })
       .addTo(map)
       .bindPopup(`
         <div style="padding: 10px; font-family: inherit;">
-          <div style="font-weight: 800; font-size: 14px; color: #0A1F34;">📍 You are here</div>
-          <div style="font-size: 12px; color: #64748B; margin-top: 2px;">Oberoi Mall, Goregaon East, Mumbai</div>
-          <div style="font-size: 11px; color: #D6383B; font-weight: 600; margin-top: 4px;">Search reference origin</div>
+          <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(userLocationName)}</div>
+          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
         </div>
       `, { offset: [0, -6] });
 
@@ -252,6 +290,364 @@
     setTimeout(fixMapSize, 1000);
     window.addEventListener('resize', fixMapSize);
     window.addEventListener('load', fixMapSize);
+  }
+
+  /**
+   * Calculate Great-Circle Distance between two coordinates in Kilometers (Haversine Formula)
+   */
+  function calcDistanceKm(lat1, lon1, lat2, lon2) {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 9999;
+    const R = 6371; // Earth's mean radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10;
+  }
+
+  /**
+   * Recalculate distances for all studios relative to current userCoords
+   */
+  function recalculateDistances() {
+    if (!userCoords) return;
+    const [uLat, uLng] = userCoords;
+    allStudios.forEach(s => {
+      s.distance = calcDistanceKm(uLat, uLng, s.lat, s.lng);
+    });
+  }
+
+  /**
+   * Set active user location, update marker, center map, recalculate distances & re-apply filters
+   */
+  function setUserLocation(lat, lng, name, saveToStorage = true) {
+    userCoords = [lat, lng];
+    userLocationName = name;
+    isLocationSet = true;
+
+    if (saveToStorage) {
+      try {
+        localStorage.setItem('fitpass_user_location', JSON.stringify({ lat, lng, name }));
+      } catch (e) {
+        console.warn('LocalStorage save failed:', e);
+      }
+    }
+
+    if (el.refLocationLabel) {
+      el.refLocationLabel.textContent = name;
+      el.refLocationLabel.title = `Active search location: ${name} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    }
+    if (el.legendUserLabel) {
+      el.legendUserLabel.textContent = `You (${name.split(',')[0]})`;
+    }
+
+    // Recompute distances for all 2,574 gyms
+    recalculateDistances();
+
+    // Update or create user beacon marker
+    if (map) {
+      if (!userMarker) {
+        const userIcon = L.divIcon({
+          className: 'user-marker-icon',
+          html: '<div class="user-beacon"></div>',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 }).addTo(map);
+      } else {
+        userMarker.setLatLng(userCoords);
+      }
+
+      userMarker.bindPopup(`
+        <div style="padding: 10px; font-family: inherit;">
+          <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(name)}</div>
+          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
+        </div>
+      `, { offset: [0, -6] });
+
+      map.setView(userCoords, 13, { animate: true });
+    }
+
+    applyFilters();
+  }
+
+  /**
+   * Reverse Geocode coordinates to friendly neighborhood/city name via Nominatim
+   */
+  async function reverseGeocode(lat, lng) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return;
+      const data = await res.json();
+      const addr = data.address || {};
+      const locality = addr.suburb || addr.neighbourhood || addr.residential || addr.city_district || addr.road || '';
+      const city = addr.city || addr.town || addr.state_district || addr.state || '';
+      const cleanName = [locality, city].filter(Boolean).join(', ') || data.name || 'Current Location';
+
+      userLocationName = cleanName;
+      if (el.refLocationLabel) {
+        el.refLocationLabel.textContent = cleanName;
+        el.refLocationLabel.title = `Active search location: ${cleanName} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      }
+      if (el.legendUserLabel) {
+        el.legendUserLabel.textContent = `You (${cleanName.split(',')[0]})`;
+      }
+      if (userMarker) {
+        userMarker.bindPopup(`
+          <div style="padding: 10px; font-family: inherit;">
+            <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(cleanName)}</div>
+            <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
+          </div>
+        `, { offset: [0, -6] });
+      }
+
+      try {
+        localStorage.setItem('fitpass_user_location', JSON.stringify({ lat, lng, name: cleanName }));
+      } catch (e) {}
+    } catch (e) {
+      console.warn('Reverse geocoding error:', e);
+    }
+  }
+
+  /**
+   * Request device location via browser Geolocation API
+   */
+  function requestDeviceLocation(fromUserClick = false) {
+    if (!('geolocation' in navigator)) {
+      openLocationModal(true, 'Geolocation is not supported by your browser. Please select or search your city.');
+      return;
+    }
+
+    if (fromUserClick && el.useGpsBtn) {
+      const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+      if (titleEl) titleEl.textContent = 'Detecting GPS coordinates...';
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setUserLocation(lat, lng, 'Current Location', true);
+        reverseGeocode(lat, lng);
+        closeLocationModal();
+        if (fromUserClick && el.useGpsBtn) {
+          const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+          if (titleEl) titleEl.textContent = 'Use My Current Location';
+        }
+      },
+      (err) => {
+        console.warn('Geolocation denied or failed:', err);
+        if (fromUserClick && el.useGpsBtn) {
+          const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+          if (titleEl) titleEl.textContent = 'Use My Current Location';
+        }
+        openLocationModal(true, 'Location access was not enabled or timed out. Please enter your city or choose a popular hub below.');
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  }
+
+  /**
+   * Initialize User Location on Application Launch
+   */
+  function initUserLocation() {
+    // 1. Check if user already has a saved preference in localStorage
+    try {
+      const saved = localStorage.getItem('fitpass_user_location');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          setUserLocation(parsed.lat, parsed.lng, parsed.name || 'Saved Location', false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('LocalStorage load error:', e);
+    }
+
+    // 2. Request device location
+    requestDeviceLocation(false);
+  }
+
+  /**
+   * Open Location Picker Modal
+   */
+  function openLocationModal(showNotice = false, noticeMsg = '') {
+    if (el.locationNotice && el.locationNoticeText) {
+      if (showNotice && noticeMsg) {
+        el.locationNoticeText.textContent = noticeMsg;
+        el.locationNotice.style.display = 'flex';
+      } else {
+        el.locationNotice.style.display = 'none';
+      }
+    }
+    if (el.locationModalBackdrop) {
+      el.locationModalBackdrop.classList.add('open');
+      setTimeout(() => {
+        if (el.locationSearchInput) el.locationSearchInput.focus();
+      }, 150);
+    }
+  }
+
+  /**
+   * Close Location Picker Modal
+   */
+  function closeLocationModal() {
+    if (el.locationModalBackdrop) {
+      el.locationModalBackdrop.classList.remove('open');
+    }
+    if (el.locationResultsList) {
+      el.locationResultsList.style.display = 'none';
+    }
+  }
+
+  /**
+   * Initialize Location Modal Controls & Popular Hubs
+   */
+  function initLocationModal() {
+    // Populate popular location buttons
+    if (el.popularLocationsGrid) {
+      el.popularLocationsGrid.innerHTML = '';
+      POPULAR_LOCATIONS.forEach(loc => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'popular-loc-pill';
+        btn.innerHTML = `
+          <span>${loc.name}</span>
+          <span class="loc-city">${loc.city}</span>
+        `;
+        btn.addEventListener('click', () => {
+          setUserLocation(loc.lat, loc.lng, `${loc.name}, ${loc.city}`, true);
+          closeLocationModal();
+        });
+        el.popularLocationsGrid.appendChild(btn);
+      });
+    }
+
+    // Close button
+    if (el.locationModalCloseBtn) {
+      el.locationModalCloseBtn.addEventListener('click', closeLocationModal);
+    }
+
+    // Click outside modal to close
+    if (el.locationModalBackdrop) {
+      el.locationModalBackdrop.addEventListener('click', (e) => {
+        if (e.target === el.locationModalBackdrop) closeLocationModal();
+      });
+    }
+
+    // GPS Button Click
+    if (el.useGpsBtn) {
+      el.useGpsBtn.addEventListener('click', () => {
+        requestDeviceLocation(true);
+      });
+    }
+
+    // Clear Search Input Button
+    if (el.clearLocationSearchBtn) {
+      el.clearLocationSearchBtn.addEventListener('click', () => {
+        el.locationSearchInput.value = '';
+        el.clearLocationSearchBtn.classList.remove('visible');
+        if (el.locationResultsList) el.locationResultsList.style.display = 'none';
+        el.locationSearchInput.focus();
+      });
+    }
+
+    // Search Input Typing (toggle clear icon & handle enter)
+    if (el.locationSearchInput) {
+      el.locationSearchInput.addEventListener('input', (e) => {
+        const hasVal = e.target.value.trim().length > 0;
+        if (el.clearLocationSearchBtn) {
+          el.clearLocationSearchBtn.classList.toggle('visible', hasVal);
+        }
+      });
+
+      el.locationSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeLocationSearch();
+        }
+      });
+    }
+
+    // Submit Search Button
+    if (el.submitLocationSearchBtn) {
+      el.submitLocationSearchBtn.addEventListener('click', executeLocationSearch);
+    }
+  }
+
+  /**
+   * Execute location geocoding search using OpenStreetMap Nominatim
+   */
+  async function executeLocationSearch() {
+    const query = (el.locationSearchInput.value || '').trim();
+    if (!query) return;
+
+    el.submitLocationSearchBtn.disabled = true;
+    el.submitLocationSearchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    el.locationResultsList.style.display = 'block';
+    el.locationResultsList.innerHTML = `
+      <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
+        <i class="fa-solid fa-spinner fa-spin"></i> Searching locations across India...
+      </div>
+    `;
+
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=6&addressdetails=1`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('Search failed');
+      const results = await res.json();
+
+      if (!results || results.length === 0) {
+        el.locationResultsList.innerHTML = `
+          <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12.5px;">
+            No locations found for "<strong>${escapeHtml(query)}</strong>". Try searching for a neighborhood, landmark, or city name.
+          </div>
+        `;
+      } else {
+        el.locationResultsList.innerHTML = '';
+        results.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'location-result-item';
+          const parts = item.display_name.split(',').map(s => s.trim());
+          const primaryName = parts.slice(0, 2).join(', ');
+          const secondaryName = parts.slice(2, 5).join(', ');
+
+          div.innerHTML = `
+            <i class="fa-solid fa-location-dot"></i>
+            <div>
+              <div style="font-weight: 700;">${escapeHtml(primaryName)}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(secondaryName || primaryName)}</div>
+            </div>
+          `;
+
+          div.addEventListener('click', () => {
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lon);
+            const cleanName = primaryName || item.display_name.split(',')[0];
+            setUserLocation(lat, lng, cleanName, true);
+            closeLocationModal();
+          });
+
+          el.locationResultsList.appendChild(div);
+        });
+      }
+    } catch (err) {
+      console.warn('Geocoding search error:', err);
+      el.locationResultsList.innerHTML = `
+        <div style="padding: 12px; text-align: center; color: #EF4444; font-size: 12px;">
+          Unable to search right now. Please select one of the popular cities below.
+        </div>
+      `;
+    } finally {
+      el.submitLocationSearchBtn.disabled = false;
+      el.submitLocationSearchBtn.innerHTML = '<span>Find</span>';
+    }
   }
 
   /**
@@ -418,11 +814,20 @@
 
     // Recenter buttons
     const recenterAction = () => {
-      map.setView(REF_COORDS, 14, { animate: true });
-      if (userMarker) userMarker.openPopup();
+      if (userCoords && map) {
+        map.setView(userCoords, 14, { animate: true });
+        if (userMarker) userMarker.openPopup();
+      }
     };
     el.recenterBtn.addEventListener('click', recenterAction);
     el.mapCenterMeBtn.addEventListener('click', recenterAction);
+
+    // Change Location Header Button
+    if (el.changeLocationBtn) {
+      el.changeLocationBtn.addEventListener('click', () => {
+        openLocationModal(false);
+      });
+    }
 
     // Fit map bounds to current markers
     el.mapFitBoundsBtn.addEventListener('click', () => {
@@ -474,8 +879,13 @@
 
     // Keyboard ESC to close modal
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && el.studioModalBackdrop.classList.contains('open')) {
-        closeModal();
+      if (e.key === 'Escape') {
+        if (el.studioModalBackdrop && el.studioModalBackdrop.classList.contains('open')) {
+          closeModal();
+        }
+        if (el.locationModalBackdrop && el.locationModalBackdrop.classList.contains('open')) {
+          closeLocationModal();
+        }
       }
     });
   }
@@ -867,7 +1277,7 @@
     const isOpen = isStudioOpenNow(studio.open_time);
     el.modalBadgesRow.innerHTML = `
       <span class="stats-pill" style="background: var(--primary-light); color: var(--primary); border-color: #FECDD3;">
-        <i class="fa-solid fa-location-dot"></i> ${studio.distance} km from Oberoi Mall
+        <i class="fa-solid fa-location-dot"></i> ${studio.distance} km away (${escapeHtml(userLocationName.split(',')[0])})
       </span>
       <span class="rating-badge" style="padding: 4px 10px; font-size: 12px;">
         <i class="fa-solid fa-star"></i> ${studio.rating ? studio.rating.toFixed(1) : 'New'} (${studio.rating_count} ratings)
@@ -940,7 +1350,7 @@
 
     // Links
     el.modalFitpassLink.href = studio.url || `https://fitpass.co.in/studio/${studio.id}`;
-    el.modalGoogleMapsLink.href = `https://www.google.com/maps/dir/?api=1&origin=${REF_COORDS[0]},${REF_COORDS[1]}&destination=${studio.lat},${studio.lng}`;
+    el.modalGoogleMapsLink.href = userCoords ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
 
     // Open Modal
     el.studioModalBackdrop.classList.add('open');

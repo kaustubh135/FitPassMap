@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FitPass Gym Map Explorer | Oberoi Mall & Beyond</title>
-  <meta name="description" content="Interactive map of all Fitpass gyms near Oberoi Mall, Goregaon East and across India with live filters, ratings, amenities, and workout types.">
+  <title>FitPass Gym Map Explorer | Nationwide Fitness Center Finder</title>
+  <meta name="description" content="Interactive map of all Fitpass gyms and fitness studios across India with live GPS location, filters, ratings, amenities, and workout types.">
   <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
   <link rel="icon" type="image/png" href="https://cdn.fitimg.in/studio_logo_63AA4A977C3235.png">
 
@@ -32,12 +32,13 @@
     <div class="brand-section">
       <a href="#" class="logo-badge">
         <span class="fitpass-logo">FITPASS</span>
-        <h1 class="brand-title">Map Explorer <span>• Oberoi Mall</span></h1>
+        <h1 class="brand-title">Map Explorer</h1>
       </a>
-      <div class="location-indicator" title="Your reference location from search query">
+      <button class="location-indicator" id="changeLocationBtn" title="Click to change your location">
         <span class="pulsing-dot"></span>
-        <span id="refLocationLabel">Oberoi Mall, Goregaon East</span>
-      </div>
+        <span id="refLocationLabel">Detecting location...</span>
+        <i class="fa-solid fa-location-dot location-edit-icon"></i>
+      </button>
     </div>
 
     <div class="header-actions">
@@ -167,9 +168,9 @@
           <i class="fa-solid fa-expand"></i>
           <span>Fit Results</span>
         </button>
-        <button class="map-control-btn" id="mapCenterMeBtn" title="Center on Oberoi Mall">
-          <i class="fa-solid fa-location-dot" style="color: #2563EB;"></i>
-          <span>Oberoi Mall</span>
+        <button class="map-control-btn" id="mapCenterMeBtn" title="Center map on my location">
+          <i class="fa-solid fa-crosshairs" style="color: #2563EB;"></i>
+          <span>My Location</span>
         </button>
       </div>
 
@@ -177,7 +178,7 @@
       <div class="map-legend">
         <div class="legend-item">
           <div class="legend-dot" style="background: #2563EB;"></div>
-          <span>You (Oberoi Mall)</span>
+          <span id="legendUserLabel">Your Location</span>
         </div>
         <div class="legend-item">
           <div class="legend-dot" style="background: #D6383B;"></div>
@@ -284,6 +285,74 @@
           <i class="fa-solid fa-diamond-turn-right"></i>
           <span>Google Maps Directions</span>
         </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Location Picker Modal Backdrop -->
+  <div class="modal-backdrop" id="locationModalBackdrop">
+    <div class="modal-content location-modal-content" id="locationModalContent">
+      <div class="location-modal-header">
+        <div class="location-modal-title-group">
+          <div class="location-icon-circle">
+            <i class="fa-solid fa-location-crosshairs"></i>
+          </div>
+          <div>
+            <h2 class="location-modal-title">Set Your Location</h2>
+            <p class="location-modal-subtitle">Find FitPass gyms & fitness clubs near you</p>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="locationModalCloseBtn" aria-label="Close location modal">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="location-modal-body">
+        <div id="locationNotice" class="location-alert" style="display: none;">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span id="locationNoticeText">Location access was not enabled. Please choose or enter your city below.</span>
+        </div>
+
+        <!-- GPS Button -->
+        <button class="btn-use-gps" id="useGpsBtn" type="button">
+          <i class="fa-solid fa-location-arrow"></i>
+          <div class="gps-btn-text">
+            <div class="gps-btn-title">Use My Current Location</div>
+            <div class="gps-btn-sub">Detect automatically via device GPS</div>
+          </div>
+          <span class="gps-badge">Auto</span>
+        </button>
+
+        <div class="location-divider">
+          <span>OR SEARCH ANY LOCALITY / CITY</span>
+        </div>
+
+        <!-- Search Input -->
+        <div class="location-search-form">
+          <div class="location-search-input-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="locationSearchInput" placeholder="e.g. Bandra, Indiranagar, Connaught Place, Hinjawadi..." autocomplete="off">
+            <button type="button" class="clear-search-btn" id="clearLocationSearchBtn">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <button type="button" class="btn-location-search" id="submitLocationSearchBtn">
+            <span>Find</span>
+          </button>
+        </div>
+
+        <!-- Search Results Dropdown / List -->
+        <div class="location-results-list" id="locationResultsList" style="display: none;"></div>
+
+        <!-- Popular Locations Grid -->
+        <div class="popular-locations-section">
+          <div class="popular-title">
+            <i class="fa-solid fa-fire text-amber-500"></i> Popular Cities & Hubs
+          </div>
+          <div class="popular-locations-grid" id="popularLocationsGrid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
       </div>
     </div>
   </div>

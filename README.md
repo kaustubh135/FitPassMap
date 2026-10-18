@@ -15,7 +15,7 @@ Originally seeded around **Oberoi Mall, Goregaon East, Mumbai**, the platform in
 ## 📸 Key Highlights
 
 - **🗺️ Interactive Map (No API Key Required)**: Seamless Leaflet.js map with clustering to render thousands of gym pins with zero lag. Includes layer switcher for **OpenStreetMap**, **Google Maps Streets**, **Esri World Street Map**, and **Carto Dark Mode**.
-- **📍 Search Origin & Distance Radius**: Pinned with a pulsing radar beacon at **Oberoi Mall**. Includes instant distance filters for `< 2 km` (Walking), `< 5 km` (Cycling), `< 10 km` (Neighborhood), `< 25 km` (Greater Mumbai), and `All India`, plus a granular 1–50 km slider.
+- **📍 Dynamic Location & Distance Radius**: Automatically detects your device location via GPS or lets you search/pick any neighborhood or city across India. Computes real-time Haversine distance with instant radius filters for `< 2 km` (Walking), `< 5 km` (Cycling), `< 10 km` (Neighborhood), `< 25 km` (Citywide), and `All India`, plus a granular 1–50 km slider.
 - **🔍 Full FitPass Search Filters**:
   - **Live Search**: Instant debounce filtering by gym name, locality, address, or activity.
   - **Rating 4.0+**: One-click toggle matching FitPass's top-rated filter.
