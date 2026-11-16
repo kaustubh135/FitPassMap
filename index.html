@@ -32,6 +32,8 @@
     <div class="brand-section">
       <a href="#" class="logo-badge">
         <span class="fitpass-logo">FITPASS</span>
+        <span class="brand-divider">+</span>
+        <span class="fitsquare-logo">FITSQUARE</span>
         <h1 class="brand-title">Map Explorer</h1>
       </a>
       <button class="location-indicator" id="changeLocationBtn" title="Click to change your location">
@@ -66,6 +68,23 @@
           <button class="clear-search-btn" id="clearSearchBtn" title="Clear search">
             <i class="fa-solid fa-xmark"></i>
           </button>
+        </div>
+
+        <!-- Platform Toggles Row -->
+        <div class="platform-row">
+          <span class="platform-row-title"><i class="fa-solid fa-layer-group"></i> Platforms:</span>
+          <div class="platform-toggles" id="platformToggles">
+            <button class="platform-pill active" data-platform="fitpass" id="togglePlatformFitpass">
+              <span class="platform-dot fp-dot"></span>
+              <span class="platform-name">FitPass</span>
+              <span class="platform-count" id="countBadgeFitpass">2,574</span>
+            </button>
+            <button class="platform-pill active" data-platform="fitsquare" id="togglePlatformFitsquare">
+              <span class="platform-dot fs-dot"></span>
+              <span class="platform-name">FitSquare</span>
+              <span class="platform-count" id="countBadgeFitsquare">210</span>
+            </button>
+          </div>
         </div>
 
         <!-- Distance Quick Filter -->
@@ -118,6 +137,14 @@
               <span id="sliderDistanceVal" style="color: var(--primary); font-weight: 700;">5 km</span>
             </div>
             <input type="range" id="distanceRangeSlider" min="1" max="50" value="5" step="1" style="width: 100%; accent-color: var(--primary); cursor: pointer;">
+          </div>
+
+          <!-- FitSquare Membership Tier Filter (Dynamically Populated) -->
+          <div id="tierFilterSection">
+            <div class="filter-section-title"><i class="fa-solid fa-id-card"></i> FitSquare Membership Tiers</div>
+            <div class="chips-cloud" id="tierChipsContainer">
+              <!-- Tier chips rendered dynamically (Basic, Premium, Elite, etc.) -->
+            </div>
           </div>
 
           <!-- Workout Types Filter -->
@@ -181,8 +208,16 @@
           <span id="legendUserLabel">Your Location</span>
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background: #D6383B;"></div>
-          <span>FitPass Gym</span>
+          <div class="legend-dot" style="background: #0284C7;"></div>
+          <span>FitPass</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #F97316;"></div>
+          <span>FitSquare</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: linear-gradient(135deg, #0284C7, #F97316);"></div>
+          <span>Both (Multi-Pass)</span>
         </div>
       </div>
     </section>
@@ -225,6 +260,16 @@
 
         <div class="modal-badges-row" id="modalBadgesRow">
           <!-- Badges for distance, rating, verified, timing rendered here -->
+        </div>
+
+        <!-- Supported Platforms & Memberships Section -->
+        <div class="modal-section" id="modalPlatformsSection">
+          <div class="modal-section-title">
+            <i class="fa-solid fa-ticket"></i> Supported Platforms & Access
+          </div>
+          <div class="platform-cards-grid" id="modalPlatformCardsGrid">
+            <!-- Populated dynamically with FitPass / FitSquare breakdown cards -->
+          </div>
         </div>
 
         <!-- Amenities Section -->
@@ -276,14 +321,13 @@
         </div>
       </div>
 
-      <div class="modal-footer">
-        <a href="#" target="_blank" rel="noopener noreferrer" class="btn-primary" id="modalFitpassLink">
-          <i class="fa-solid fa-arrow-up-right-from-square"></i>
-          <span>View on FITPASS</span>
-        </a>
+      <div class="modal-footer" id="modalFooter">
+        <div class="modal-footer-links" id="modalPlatformButtonsContainer">
+          <!-- Dynamic platform links injected here -->
+        </div>
         <a href="#" target="_blank" rel="noopener noreferrer" class="btn-outline" id="modalGoogleMapsLink">
           <i class="fa-solid fa-diamond-turn-right"></i>
-          <span>Google Maps Directions</span>
+          <span>Directions</span>
         </a>
       </div>
     </div>

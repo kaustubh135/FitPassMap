@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "serve:py": "python server.py",
-    "data:fetch": "node scripts/fetch_studios.js",
+    "data:fetch:fitpass": "node scripts/fetch_studios.js",
+    "data:fetch:fitsquare": "node scripts/fetch_fitsquare.js",
+    "data:merge": "node scripts/merge_platforms.js",
+    "data:refresh": "node scripts/update_all.js",
     "data:enrich": "node scripts/enrich_studios.js",
-    "data:prepare": "node scripts/prepare_data.js",
-    "data:refresh": "node scripts/update_all.js"
+    "data:prepare": "node scripts/prepare_data.js"
   },
   "keywords": [
     "fitpass",

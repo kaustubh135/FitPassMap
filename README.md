@@ -1,36 +1,40 @@
-# 🏋️‍♂️ FitPass Gym Map Explorer
+# 🏋️‍♂️ Multi-Platform Gym Map Explorer (FitPass + FitSquare)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Gyms Mapped](https://img.shields.io/badge/FitPass%20Studios-2%2C574%20Mapped-D6383B?style=flat&logo=target)](https://github.com/kaustubh135/FitPassMap)
-[![Coverage](https://img.shields.io/badge/Pan--India-150%2B%20Cities-0A1F34)](https://github.com/kaustubh135/FitPassMap)
+[![Gyms Mapped](https://img.shields.io/badge/Gyms%20Mapped-2%2C680%20Unified-0284C7?style=flat&logo=target)](https://github.com/kaustubh135/FitPassMap)
+[![Platforms](https://img.shields.io/badge/Platforms-FitPass%20%2B%20FitSquare-F97316)](https://github.com/kaustubh135/FitPassMap)
+[![Weekly Sync](https://img.shields.io/badge/Weekly%20Sync-Every%20Sunday-success?logo=githubactions)](https://github.com/kaustubh135/FitPassMap/actions)
 [![Deployment](https://img.shields.io/badge/Deploy-GitHub%20Pages-success?logo=github)](https://kaustubh135.github.io/FitPassMap/)
-[![Map Engine](https://img.shields.io/badge/Map%20Engine-Leaflet.js%20%2B%20MarkerCluster-green?logo=leaflet)](https://leafletjs.com/)
 
-An interactive, high-performance web application that visualizes and filters all **FitPass-supported fitness studios and gyms** on a responsive live map with full search, distance radii, ratings, amenities, operating hours, and photo galleries.
+An interactive, high-performance web application that visualizes and aggregates fitness centers, gyms, and workout studios across multiple platforms (**FitPass**, **FitSquare**, and extensible to **Cult.fit** and others) on a responsive live map with entity deduplication, multi-platform badges, membership tier filters, canonical amenities, and side-by-side platform comparisons.
 
-Originally seeded around **Oberoi Mall, Goregaon East, Mumbai**, the platform includes a verified catalog of **2,574 fitness centers** across Mumbai, Pune, Bangalore, Hyderabad, Delhi NCR, and 150+ Indian cities.
+The platform currently maps **2,680 unified fitness locations** across 150+ Indian cities, including **104 dual-listed gyms** available on both FitPass and FitSquare simultaneously.
 
 ---
 
 ## 📸 Key Highlights
 
-- **🗺️ Interactive Map (No API Key Required)**: Seamless Leaflet.js map with clustering to render thousands of gym pins with zero lag. Includes layer switcher for **OpenStreetMap**, **Google Maps Streets**, **Esri World Street Map**, and **Carto Dark Mode**.
-- **📍 Dynamic Location & Distance Radius**: Automatically detects your device location via GPS or lets you search/pick any neighborhood or city across India. Computes real-time Haversine distance with instant radius filters for `< 2 km` (Walking), `< 5 km` (Cycling), `< 10 km` (Neighborhood), `< 25 km` (Citywide), and `All India`, plus a granular 1–50 km slider.
-- **🔍 Full FitPass Search Filters**:
-  - **Live Search**: Instant debounce filtering by gym name, locality, address, or activity.
-  - **Rating 4.0+**: One-click toggle matching FitPass's top-rated filter.
-  - **Verified Partners**: Filter for official FitPass Verified Partner centers.
-  - **Open Now**: Evaluates current local device clock against gym hours (`open_time`).
-  - **Workout Activities**: Multi-select tags for *Gym Workout, Yoga, Zumba, HIIT, Crossfit, Swimming, Pilates, MMA, Combat, Dance, Women-Only Gyms*, and more.
-  - **Amenities & Facilities**: Filter for *Air Conditioner, Parking, WiFi, Water Cooler, Locker, Cafeteria, and Certified Trainers*.
-  - **Sorting**: Nearest first, Highest Rated, Most Reviews, or Name (A-Z).
-- **🏢 Deep Studio Profile Modal**:
-  - High-resolution photo gallery carousel.
-  - One-click **Copy Address** button.
-  - Operating hours & real-time Open/Closed status.
-  - Full amenities checklist with visual icons.
-  - Real member reviews & ratings breakdown.
-  - Direct links to **Official FitPass Studio Page** and **Google Maps Turn-by-Turn Navigation**.
+- **⚡ Multi-Platform Hub & Entity Resolution**:
+  - Automatically merges identical gyms listed on multiple platforms using spatial proximity (Haversine $\le$ 200m) + token-based fuzzy matching.
+  - Overlapping gyms (e.g. *3 Musketeers Fitness Club*, *Elixir Fitness*, *Bodylink Fitness*) display unified cards with multi-platform badges (`[FitPass]` `[FitSquare: Premium]`).
+- **🗺️ Scalable Map Pins & Color Differentiation**:
+  - 🟦 **FitPass Only**: Classic Blue pin (`#0284C7`).
+  - 🟧 **FitSquare Only**: Vibrant Orange pin (`#F97316`).
+  - ⚡ **Multi-Pass Hub (Both Platforms)**: Gradient dual-color pin with a `2x` badge.
+  - 5 Free Map Styles: OpenStreetMap, Google Maps Streets, Esri World Street Map, Carto Voyager, and Carto Dark.
+- **⭐ Weighted Rating Aggregation (with Zero-Review Guard)**:
+  - Computes review-weighted ratings across platforms so that unrated platforms never drag down an established gym's rating.
+  - Detail modal provides a clear side-by-side platform rating and review count breakdown.
+- **🏷️ Dynamic Membership Tiers (Zero Hardcoding)**:
+  - Dynamically extracts available membership tiers directly from web data (e.g., `Basic`, `Premium`, `Elite`).
+  - Allows filtering by specific FitSquare membership tiers or showing all.
+- **🧼 Canonical Amenity Normalization**:
+  - Maps differing platform vocabularies (`AC` vs `Air Conditioner`, `WiFi` vs `Free Wifi`, `Cafeteria` vs `Juice Bar Cafe`, `Bike/Car Parking` vs `Parking`) to a unified, standardized amenity checklist.
+- **📍 Dynamic Device Location & City Search**:
+  - Automatically detects location via device GPS or forward geocoding across Indian neighborhoods and cities.
+  - Real-time Haversine distance recalculation with quick presets (`< 2 km`, `< 5 km`, `< 10 km`, `< 25 km`, `All India`) and 1–50 km slider.
+- **🔄 Automated Weekly Sunday Sync**:
+  - GitHub Actions cron workflow (`.github/workflows/weekly-sync.yml`) runs automatically every Sunday at midnight UTC to pull the latest catalogs from FitPass and FitSquare, merge and deduplicate, and deploy updates.
 
 ---
 

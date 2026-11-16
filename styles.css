@@ -1552,6 +1552,340 @@ body {
 }
 
 /* ==========================================================================
+   Multi-Platform Support & Theming (FitPass + FitSquare + Future Platforms)
+   ========================================================================== */
+
+.brand-divider {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 14px;
+  margin: 0 1px;
+}
+
+.fitsquare-logo {
+  background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  color: white;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Platform Filter Toggles Row */
+.platform-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 6px 0;
+  border-bottom: 1px dashed var(--border);
+  margin-bottom: 6px;
+}
+
+.platform-row-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.platform-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.platform-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.platform-pill:hover {
+  border-color: #94A3B8;
+  transform: translateY(-1px);
+}
+
+.platform-pill.active {
+  background: #F8FAFC;
+  border-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.platform-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fp-dot { background: #0284C7; }
+.fs-dot { background: #F97316; }
+
+.platform-count {
+  font-size: 10px;
+  font-weight: 700;
+  background: #E2E8F0;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 10px;
+}
+
+.platform-pill.active[data-platform="fitpass"] {
+  border-color: #0284C7;
+  color: #0369A1;
+  background: #F0F9FF;
+}
+.platform-pill.active[data-platform="fitpass"] .platform-count {
+  background: #BAE6FD;
+  color: #0369A1;
+}
+
+.platform-pill.active[data-platform="fitsquare"] {
+  border-color: #F97316;
+  color: #C2410C;
+  background: #FFF7ED;
+}
+.platform-pill.active[data-platform="fitsquare"] .platform-count {
+  background: #FFEDD5;
+  color: #C2410C;
+}
+
+/* Card Platform Badges */
+.card-platform-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.platform-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.pt-fitpass {
+  background: #E0F2FE;
+  color: #0284C7;
+  border: 1px solid #BAE6FD;
+}
+
+.pt-fitsquare-basic {
+  background: #FEF3C7;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+
+.pt-fitsquare-premium {
+  background: #FFEDD5;
+  color: #EA580C;
+  border: 1px solid #FED7AA;
+}
+
+.pt-fitsquare-elite {
+  background: #F3E8FF;
+  color: #9333EA;
+  border: 1px solid #E9D5FF;
+}
+
+.pt-fitsquare-generic {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FFEDD5;
+}
+
+.pt-multipass {
+  background: linear-gradient(135deg, #0284C7 0%, #EA580C 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* Scalable Map Pin Markers */
+.gym-pin.pin-fitpass {
+  background: #0284C7;
+}
+
+.gym-pin.pin-fitsquare {
+  background: #F97316;
+}
+
+.gym-pin.pin-multipass {
+  background: linear-gradient(135deg, #0284C7 0%, #F97316 100%);
+  border-color: #FEF08A;
+  box-shadow: 0 3px 10px rgba(249, 115, 22, 0.45);
+}
+
+.gym-pin.pin-multipass::after {
+  content: '2x';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #1E293B;
+  color: #F8FAFC;
+  font-size: 9px;
+  font-weight: 800;
+  border-radius: 8px;
+  padding: 1px 4px;
+  transform: rotate(45deg);
+  border: 1.5px solid white;
+}
+
+/* Modal Platforms Grid */
+.platform-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.platform-access-card {
+  background: #F8FAFC;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.platform-access-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.platform-access-card.card-fitpass {
+  border-left: 4px solid #0284C7;
+  background: #F0F9FF;
+}
+
+.platform-access-card.card-fitsquare {
+  border-left: 4px solid #F97316;
+  background: #FFF7ED;
+}
+
+.pac-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pac-brand-badge {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pac-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pac-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.pac-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pac-footer-action {
+  margin-top: 4px;
+}
+
+.pac-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.pac-btn-fitpass {
+  background: #0284C7;
+  color: white;
+}
+.pac-btn-fitpass:hover {
+  background: #0369A1;
+}
+
+.pac-btn-fitsquare {
+  background: #F97316;
+  color: white;
+}
+.pac-btn-fitsquare:hover {
+  background: #EA580C;
+}
+
+/* Modal Gallery with Source Pill */
+.gallery-thumb-container {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+
+.gallery-platform-pill {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.modal-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
    Dark Mode Support (Handles system dark preference & dark browser extensions)
    ========================================================================== */
 @media (prefers-color-scheme: dark) {

@@ -26,6 +26,8 @@
     openNowOnly: false,
     selectedWorkouts: new Set(),
     selectedAmenities: new Set(),
+    selectedPlatforms: new Set(['fitpass', 'fitsquare']), // Both enabled by default
+    selectedTiers: new Set(), // Dynamically extracted tiers
     sortBy: 'distance_asc'
   };
 
@@ -170,7 +172,16 @@
     modalReviewsSection: document.getElementById('modalReviewsSection'),
     modalReviewsList: document.getElementById('modalReviewsList'),
     modalFitpassLink: document.getElementById('modalFitpassLink'),
-    modalGoogleMapsLink: document.getElementById('modalGoogleMapsLink')
+    modalGoogleMapsLink: document.getElementById('modalGoogleMapsLink'),
+    // Multi-Platform Elements
+    togglePlatformFitpass: document.getElementById('togglePlatformFitpass'),
+    togglePlatformFitsquare: document.getElementById('togglePlatformFitsquare'),
+    countBadgeFitpass: document.getElementById('countBadgeFitpass'),
+    countBadgeFitsquare: document.getElementById('countBadgeFitsquare'),
+    tierChipsContainer: document.getElementById('tierChipsContainer'),
+    modalPlatformsSection: document.getElementById('modalPlatformsSection'),
+    modalPlatformCardsGrid: document.getElementById('modalPlatformCardsGrid'),
+    modalPlatformButtonsContainer: document.getElementById('modalPlatformButtonsContainer')
   };
 
   /**
@@ -186,18 +197,30 @@
   }
 
   /**
-   * Load Data from window.FITPASS_DATA or fetch fallback
+   * Load Data from window.STUDIOS_DATA or window.FITPASS_DATA or fetch fallback
    */
   function loadData() {
-    if (window.FITPASS_DATA && window.FITPASS_DATA.studios) {
-      allStudios = window.FITPASS_DATA.studios;
-      console.log(`Loaded ${allStudios.length} studios from FITPASS_DATA`);
+    const raw = window.STUDIOS_DATA || window.FITPASS_DATA;
+    if (raw && raw.studios) {
+      allStudios = raw.studios;
+      console.log(`Loaded ${allStudios.length} studios from STUDIOS_DATA`);
+      
+      // Update platform count badges if metadata exists
+      if (raw.metadata && raw.metadata.platformCounts) {
+        if (el.countBadgeFitpass) el.countBadgeFitpass.textContent = raw.metadata.platformCounts.fitpass.toLocaleString();
+        if (el.countBadgeFitsquare) el.countBadgeFitsquare.textContent = raw.metadata.platformCounts.fitsquare.toLocaleString();
+      }
     } else {
-      console.warn("window.FITPASS_DATA not found. Trying fetch fallback...");
+      console.warn("window.STUDIOS_DATA not found. Trying fetch fallback...");
       fetch('studios_data.json')
         .then(res => res.json())
         .then(data => {
           allStudios = data.studios;
+          if (data.metadata && data.metadata.platformCounts) {
+            if (el.countBadgeFitpass) el.countBadgeFitpass.textContent = data.metadata.platformCounts.fitpass.toLocaleString();
+            if (el.countBadgeFitsquare) el.countBadgeFitsquare.textContent = data.metadata.platformCounts.fitsquare.toLocaleString();
+          }
+          initFiltersUI();
           applyFilters();
         })
         .catch(err => {
@@ -712,12 +735,69 @@
       });
       el.amenityChipsContainer.appendChild(chip);
     });
+
+    // Membership Tier Chips (Dynamic - Basic, Premium, Elite, etc.)
+    if (el.tierChipsContainer) {
+      const rawData = window.STUDIOS_DATA || window.FITPASS_DATA;
+      let tiers = (rawData && rawData.metadata && rawData.metadata.tiers) ? rawData.metadata.tiers : [];
+      if (!tiers || tiers.length === 0) {
+        // Collect from allStudios if metadata is empty
+        const collected = new Set();
+        allStudios.forEach(s => {
+          if (s.platform_details && s.platform_details.fitsquare && s.platform_details.fitsquare.tier) {
+            collected.add(s.platform_details.fitsquare.tier);
+          }
+        });
+        tiers = Array.from(collected).sort();
+      }
+
+      el.tierChipsContainer.innerHTML = '';
+      tiers.forEach(tier => {
+        const chip = document.createElement('button');
+        chip.className = 'filter-chip';
+        chip.innerHTML = `<i class="fa-solid fa-id-badge"></i><span>${escapeHtml(tier)}</span>`;
+        chip.dataset.tier = tier;
+        chip.addEventListener('click', () => {
+          if (filterState.selectedTiers.has(tier)) {
+            filterState.selectedTiers.delete(tier);
+            chip.classList.remove('active');
+          } else {
+            filterState.selectedTiers.add(tier);
+            chip.classList.add('active');
+          }
+          updateActiveFilterBadge();
+          applyFilters();
+        });
+        el.tierChipsContainer.appendChild(chip);
+      });
+    }
   }
 
   /**
    * Bind DOM Events
    */
   function bindEvents() {
+    // Platform Toggles (FitPass, FitSquare)
+    const setupPlatformToggle = (btn, platformKey) => {
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        if (filterState.selectedPlatforms.has(platformKey)) {
+          // Guard: keep at least 1 platform selected
+          if (filterState.selectedPlatforms.size === 1) {
+            return;
+          }
+          filterState.selectedPlatforms.delete(platformKey);
+          btn.classList.remove('active');
+        } else {
+          filterState.selectedPlatforms.add(platformKey);
+          btn.classList.add('active');
+        }
+        applyFilters();
+      });
+    };
+    setupPlatformToggle(el.togglePlatformFitpass, 'fitpass');
+    setupPlatformToggle(el.togglePlatformFitsquare, 'fitsquare');
+
     // Search Input
     let debounceTimer = null;
     el.searchInput.addEventListener('input', (e) => {
@@ -901,6 +981,8 @@
     filterState.openNowOnly = false;
     filterState.selectedWorkouts.clear();
     filterState.selectedAmenities.clear();
+    filterState.selectedPlatforms = new Set(['fitpass', 'fitsquare']);
+    filterState.selectedTiers.clear();
     filterState.sortBy = 'distance_asc';
 
     el.searchInput.value = '';
@@ -912,12 +994,16 @@
     el.distanceRangeSlider.value = 5;
     el.sliderDistanceVal.textContent = '5 km';
 
+    if (el.togglePlatformFitpass) el.togglePlatformFitpass.classList.add('active');
+    if (el.togglePlatformFitsquare) el.togglePlatformFitsquare.classList.add('active');
+
     document.querySelectorAll('#distancePresets .dist-pill').forEach(p => {
       p.classList.toggle('active', p.dataset.distance === '5');
     });
 
     document.querySelectorAll('#workoutChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('#amenityChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('#tierChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
 
     updateActiveFilterBadge();
     applyFilters();
@@ -933,6 +1019,8 @@
     if (filterState.openNowOnly) count++;
     count += filterState.selectedWorkouts.size;
     count += filterState.selectedAmenities.size;
+    if (filterState.selectedPlatforms.size < 2) count++;
+    count += filterState.selectedTiers.size;
     if (filterState.maxDistance !== 5) count++;
 
     if (count > 0) {
@@ -981,6 +1069,19 @@
     const query = filterState.search;
 
     filteredStudios = allStudios.filter(studio => {
+      // Platform filter
+      const studioPlatforms = studio.platforms || ['fitpass'];
+      const hasSelectedPlatform = studioPlatforms.some(p => filterState.selectedPlatforms.has(p));
+      if (!hasSelectedPlatform) return false;
+
+      // FitSquare Membership Tier filter
+      if (filterState.selectedTiers.size > 0) {
+        const tier = studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier;
+        if (!tier || !filterState.selectedTiers.has(tier)) {
+          return false;
+        }
+      }
+
       // Distance filter
       if (studio.distance > filterState.maxDistance) return false;
 
@@ -1060,21 +1161,42 @@
     markerCluster.clearLayers();
     studioMarkersMap.clear();
 
-    const gymIcon = L.divIcon({
-      className: 'gym-marker-icon',
-      html: '<div class="gym-pin"><i class="fa-solid fa-dumbbell"></i></div>',
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -30]
-    });
-
     const newMarkers = [];
 
     filteredStudios.forEach(studio => {
+      const platforms = studio.platforms || ['fitpass'];
+      const isMultiPass = platforms.length > 1;
+      const isFitSquareOnly = platforms.length === 1 && platforms[0] === 'fitsquare';
+      
+      let pinClass = 'pin-fitpass';
+      if (isMultiPass) {
+        pinClass = 'pin-multipass';
+      } else if (isFitSquareOnly) {
+        pinClass = 'pin-fitsquare';
+      }
+
+      const gymIcon = L.divIcon({
+        className: 'gym-marker-icon',
+        html: `<div class="gym-pin ${pinClass}"><i class="fa-solid fa-dumbbell"></i></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -30]
+      });
+
       const marker = L.marker([studio.lat, studio.lng], { icon: gymIcon });
 
       const isOpen = isStudioOpenNow(studio.open_time);
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
+
+      // Platform Badges for Popup
+      const platformBadgesHtml = platforms.map(p => {
+        if (p === 'fitpass') return '<span class="platform-tag pt-fitpass">FitPass</span>';
+        if (p === 'fitsquare') {
+          const tier = (studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier) || '';
+          return `<span class="platform-tag pt-fitsquare-${tier.toLowerCase()}">FitSquare ${escapeHtml(tier)}</span>`;
+        }
+        return `<span class="platform-tag">${escapeHtml(p)}</span>`;
+      }).join(' ');
 
       // Custom rich popup
       const popupHtml = `
@@ -1084,6 +1206,9 @@
             ${studio.logo ? `<img class="popup-logo" src="${studio.logo}" alt="Logo" onerror="this.style.display='none'">` : ''}
           </div>
           <div class="popup-body">
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;">
+              ${platformBadgesHtml}
+            </div>
             <h3 class="popup-name">${escapeHtml(studio.name)}</h3>
             <div class="popup-locality">
               <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i>
@@ -1105,7 +1230,7 @@
               ${(studio.workouts || []).slice(0, 3).map(w => `<span class="workout-tag">${escapeHtml(w)}</span>`).join('')}
             </div>
 
-            <button class="popup-btn" onclick="window.viewStudioDetails(${studio.id})">
+            <button class="popup-btn" onclick="window.viewStudioDetails('${studio.id}')">
               <i class="fa-solid fa-circle-info"></i> View Full Details
             </button>
           </div>
@@ -1118,7 +1243,7 @@
         highlightCard(studio.id);
       });
 
-      studioMarkersMap.set(studio.id, marker);
+      studioMarkersMap.set(String(studio.id), marker);
       newMarkers.push(marker);
     });
 
@@ -1167,6 +1292,7 @@
 
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
       const isOpen = isStudioOpenNow(studio.open_time);
+      const platforms = studio.platforms || ['fitpass'];
 
       // Workouts preview
       const workoutsHtml = (studio.workouts || []).slice(0, 3).map(w =>
@@ -1180,6 +1306,20 @@
         return `<span class="amenity-icon-item" title="${escapeHtml(a)}"><i class="${icon}"></i></span>`;
       }).join('');
 
+      // Platform Badges Preview on Card
+      const cardPlatformBadgesHtml = `
+        <div class="card-platform-badges">
+          ${platforms.map(p => {
+            if (p === 'fitpass') return '<span class="platform-tag pt-fitpass"><i class="fa-solid fa-check"></i> FitPass</span>';
+            if (p === 'fitsquare') {
+              const tier = (studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier) || 'Pass';
+              return `<span class="platform-tag pt-fitsquare-${tier.toLowerCase()}"><i class="fa-solid fa-cube"></i> FitSquare: ${escapeHtml(tier)}</span>`;
+            }
+            return `<span class="platform-tag">${escapeHtml(p)}</span>`;
+          }).join('')}
+        </div>
+      `;
+
       card.innerHTML = `
         <div class="studio-thumb-wrapper">
           <img class="studio-thumb" src="${studio.image || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'}" alt="${escapeHtml(studio.name)}" loading="lazy" onerror="this.src='https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'">
@@ -1189,9 +1329,10 @@
           <div>
             <div class="studio-title-row">
               <h3 class="studio-name" title="${escapeHtml(studio.name)}">${escapeHtml(studio.name)}</h3>
-              ${studio.verified ? '<i class="fa-solid fa-certificate verified-icon" title="FITPASS Verified Partner"></i>' : ''}
+              ${studio.verified ? '<i class="fa-solid fa-certificate verified-icon" title="Verified Partner"></i>' : ''}
             </div>
-            <div class="studio-meta-row">
+            ${cardPlatformBadgesHtml}
+            <div class="studio-meta-row" style="margin-top: 4px;">
               <span class="meta-distance">${studio.distance} km away</span>
               <span>•</span>
               <span class="truncate">${escapeHtml(studio.locality || studio.city)}</span>
@@ -1292,6 +1433,74 @@
       ` : ''}
     `;
 
+    // Supported Platforms & Access Cards
+    if (el.modalPlatformCardsGrid) {
+      el.modalPlatformCardsGrid.innerHTML = '';
+      const platforms = studio.platforms || ['fitpass'];
+      const pDetails = studio.platform_details || {};
+
+      platforms.forEach(p => {
+        if (p === 'fitpass') {
+          const fp = pDetails.fitpass || {
+            name: studio.name,
+            rating: studio.rating,
+            rating_count: studio.rating_count,
+            url: studio.url || `https://fitpass.co.in/studio/${studio.id}`
+          };
+          const fpRating = fp.rating ? fp.rating.toFixed(1) : 'New';
+          const card = document.createElement('div');
+          card.className = 'platform-access-card card-fitpass';
+          card.innerHTML = `
+            <div class="pac-header">
+              <span class="pac-brand-badge" style="color: #0284C7;"><i class="fa-solid fa-ticket"></i> FITPASS</span>
+              <span class="platform-tag pt-fitpass">All-Access Pass</span>
+            </div>
+            <div class="pac-body">
+              <div class="pac-title">${escapeHtml(fp.name || studio.name)}</div>
+              <div class="pac-detail"><i class="fa-solid fa-star text-amber-500"></i> <strong>${fpRating}</strong> (${fp.rating_count || 0} reviews)</div>
+              <div class="pac-detail"><i class="fa-solid fa-circle-check text-green-600"></i> Included in all FITPASS subscriptions</div>
+            </div>
+            <div class="pac-footer-action">
+              <a href="${fp.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitpass">
+                <span>View on FitPass</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>
+            </div>
+          `;
+          el.modalPlatformCardsGrid.appendChild(card);
+        } else if (p === 'fitsquare') {
+          const fs = pDetails.fitsquare || {
+            name: studio.name,
+            tier: 'Standard',
+            rating: studio.rating,
+            rating_count: studio.rating_count,
+            url: `https://fitsquare.in/gym/${studio.id}`
+          };
+          const fsRating = fs.rating ? fs.rating.toFixed(1) : 'New';
+          const tier = fs.tier || 'Standard';
+          const card = document.createElement('div');
+          card.className = 'platform-access-card card-fitsquare';
+          card.innerHTML = `
+            <div class="pac-header">
+              <span class="pac-brand-badge" style="color: #F97316;"><i class="fa-solid fa-cube"></i> FITSQUARE</span>
+              <span class="platform-tag pt-fitsquare-${tier.toLowerCase()}">${escapeHtml(tier)} Tier</span>
+            </div>
+            <div class="pac-body">
+              <div class="pac-title">${escapeHtml(fs.name || studio.name)}</div>
+              <div class="pac-detail"><i class="fa-solid fa-star text-amber-500"></i> <strong>${fsRating}</strong> (${fs.rating_count || 0} reviews)</div>
+              <div class="pac-detail"><i class="fa-solid fa-tag text-orange-600"></i> Lifetime valid session pack access</div>
+              ${fs.telephone ? `<div class="pac-detail"><i class="fa-solid fa-phone text-blue-600"></i> ${escapeHtml(fs.telephone)}</div>` : ''}
+            </div>
+            <div class="pac-footer-action">
+              <a href="${fs.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitsquare">
+                <span>View on FitSquare</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>
+            </div>
+          `;
+          el.modalPlatformCardsGrid.appendChild(card);
+        }
+      });
+    }
+
     // Amenities Grid
     if (studio.amenities && studio.amenities.length > 0) {
       el.modalAmenitiesSection.style.display = 'block';
@@ -1321,15 +1530,25 @@
       el.modalAboutSection.style.display = 'none';
     }
 
-    // Photo Gallery
-    const galleryImages = (studio.gallery && studio.gallery.length > 0) ? studio.gallery : (studio.image ? [studio.image] : []);
-    if (galleryImages.length > 0) {
+    // Photo Gallery with Platform Attribution
+    if (studio.gallery_detailed && studio.gallery_detailed.length > 0) {
       el.modalGallerySection.style.display = 'block';
-      el.modalGalleryGrid.innerHTML = galleryImages.map(img => `
-        <img class="gallery-thumb" src="${img}" alt="Gallery" loading="lazy" onclick="window.setModalBanner('${img}')">
+      el.modalGalleryGrid.innerHTML = studio.gallery_detailed.map(item => `
+        <div class="gallery-thumb-container">
+          <span class="gallery-platform-pill">${item.platform === 'fitsquare' ? 'FitSquare' : 'FitPass'}</span>
+          <img class="gallery-thumb" src="${item.url}" alt="Gallery" loading="lazy" onclick="window.setModalBanner('${item.url}')">
+        </div>
       `).join('');
     } else {
-      el.modalGallerySection.style.display = 'none';
+      const galleryImages = (studio.gallery && studio.gallery.length > 0) ? studio.gallery : (studio.image ? [studio.image] : []);
+      if (galleryImages.length > 0) {
+        el.modalGallerySection.style.display = 'block';
+        el.modalGalleryGrid.innerHTML = galleryImages.map(img => `
+          <img class="gallery-thumb" src="${img}" alt="Gallery" loading="lazy" onclick="window.setModalBanner('${img}')">
+        `).join('');
+      } else {
+        el.modalGallerySection.style.display = 'none';
+      }
     }
 
     // Reviews List
@@ -1348,8 +1567,37 @@
       el.modalReviewsSection.style.display = 'none';
     }
 
-    // Links
-    el.modalFitpassLink.href = studio.url || `https://fitpass.co.in/studio/${studio.id}`;
+    // Dynamic Platform Direct Action Links
+    if (el.modalPlatformButtonsContainer) {
+      el.modalPlatformButtonsContainer.innerHTML = '';
+      const platforms = studio.platforms || ['fitpass'];
+      const pDetails = studio.platform_details || {};
+
+      if (platforms.includes('fitpass')) {
+        const fpUrl = (pDetails.fitpass && pDetails.fitpass.url) || studio.url || `https://fitpass.co.in/studio/${studio.id}`;
+        const fpBtn = document.createElement('a');
+        fpBtn.href = fpUrl;
+        fpBtn.target = '_blank';
+        fpBtn.rel = 'noopener noreferrer';
+        fpBtn.className = 'btn-primary';
+        fpBtn.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i><span>View on FITPASS</span>';
+        el.modalPlatformButtonsContainer.appendChild(fpBtn);
+      }
+
+      if (platforms.includes('fitsquare')) {
+        const fsUrl = (pDetails.fitsquare && pDetails.fitsquare.url) || `https://fitsquare.in/gym/${studio.id}`;
+        const fsBtn = document.createElement('a');
+        fsBtn.href = fsUrl;
+        fsBtn.target = '_blank';
+        fsBtn.rel = 'noopener noreferrer';
+        fsBtn.className = 'btn-primary';
+        fsBtn.style.background = 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)';
+        fsBtn.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i><span>View on FITSQUARE</span>';
+        el.modalPlatformButtonsContainer.appendChild(fsBtn);
+      }
+    }
+
+    // Google Maps Direction Link
     el.modalGoogleMapsLink.href = userCoords ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
 
     // Open Modal
@@ -1373,7 +1621,7 @@
 
   // Global triggers
   window.viewStudioDetails = function (id) {
-    const studio = allStudios.find(s => s.id === id);
+    const studio = allStudios.find(s => String(s.id) === String(id));
     if (studio) openModal(studio);
   };
 
