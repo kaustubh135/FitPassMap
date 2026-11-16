@@ -168,6 +168,7 @@ function mergePlatforms() {
 
     let bestFsMatch = null;
     let bestFsIndex = -1;
+    let bestFsDist = 0;
     let highestSim = 0;
 
     if (!isNaN(fpLat) && !isNaN(fpLng)) {
@@ -182,6 +183,7 @@ function mergePlatforms() {
             highestSim = sim;
             bestFsMatch = fsGym;
             bestFsIndex = j;
+            bestFsDist = dist;
           }
         }
       }
@@ -244,6 +246,9 @@ function mergePlatforms() {
           fitpass: {
             id: fp.id,
             name: fp.name,
+            address: fp.address || '',
+            lat: fpLat,
+            lng: fpLng,
             url: fp.url,
             rating: fp.rating,
             rating_count: fp.rating_count,
@@ -253,6 +258,10 @@ function mergePlatforms() {
           fitsquare: {
             slug: bestFsMatch.slug,
             name: bestFsMatch.name,
+            address: bestFsMatch.address || '',
+            lat: bestFsMatch.lat,
+            lng: bestFsMatch.lng,
+            coord_delta_meters: Math.round(bestFsDist),
             url: bestFsMatch.url,
             tier: bestFsMatch.tier || 'Standard',
             membership: `Session Pack (${bestFsMatch.tier || 'Standard'})`,
