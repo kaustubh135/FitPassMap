@@ -141,7 +141,39 @@ function calculateWeightedRating(platforms) {
   };
 }
 
-// 5. Main Merger
+// 5. Evaluate Location Confidence and Address Specificity
+function scoreLocationConfidence(details) {
+  let score = 0;
+  if (!details) return score;
+
+  const addr = (details.address || '').trim();
+  if (addr.length > 20) score += 2;
+  if (addr.length > 50) score += 2;
+
+  // Has 6-digit Indian PIN code
+  if (/\b[1-9][0-9]{5}\b/.test(addr) || details.postalCode) score += 4;
+
+  // Specific building, street, or landmark indicators
+  if (/\b(above|near|opp|opposite|beside|behind|next to|floor|road|layout|nagar|complex|mall|building|tower)\b/i.test(addr)) {
+    score += 3;
+  }
+
+  // Verified business contact (from Google Places)
+  if (details.telephone) score += 3;
+  if (details.email) score += 1;
+
+  // High coordinate precision (decimals)
+  const latStr = String(details.lat || '');
+  const decimals = latStr.includes('.') ? latStr.split('.')[1].length : 0;
+  if (decimals >= 6) score += 2;
+  if (decimals >= 7) score += 1;
+
+  if (details.verified) score += 1;
+
+  return score;
+}
+
+// 6. Main Merger
 function mergePlatforms() {
   console.log('[Merger] Reading existing datasets...');
   let fitpassStudios = [];
@@ -226,14 +258,36 @@ function mergePlatforms() {
         }
       });
 
+      // Automated Location Confidence Scoring (Option 1)
+      const fpScore = scoreLocationConfidence({
+        address: fp.address,
+        lat: fpLat,
+        lng: fpLng,
+        verified: fp.verified
+      });
+      const fsScore = scoreLocationConfidence({
+        address: bestFsMatch.address,
+        postalCode: bestFsMatch.postalCode,
+        lat: bestFsMatch.lat,
+        lng: bestFsMatch.lng,
+        telephone: bestFsMatch.telephone,
+        email: bestFsMatch.email
+      });
+
+      const useFitSquareLocation = fsScore >= fpScore;
+      const resolvedLat = useFitSquareLocation ? bestFsMatch.lat : fpLat;
+      const resolvedLng = useFitSquareLocation ? bestFsMatch.lng : fpLng;
+      const resolvedAddress = (useFitSquareLocation ? bestFsMatch.address : fp.address) || bestFsMatch.address || fp.address || '';
+
       unifiedStudios.push({
         id: `m-fp-${fp.id}_fs-${bestFsMatch.slug}`,
         name: fp.name,
         locality: fp.locality || bestFsMatch.locality || '',
         city: fp.city || bestFsMatch.city || '',
-        address: bestFsMatch.address || fp.address || '',
-        lat: fpLat,
-        lng: fpLng,
+        address: resolvedAddress,
+        lat: resolvedLat,
+        lng: resolvedLng,
+        location_source: useFitSquareLocation ? 'fitsquare' : 'fitpass',
         rating: ratingInfo.rating,
         rating_count: ratingInfo.count,
         image: cleanUrl(fp.image) || cleanUrl(bestFsMatch.image) || (galleryWithSource[0] ? galleryWithSource[0].url : ''),

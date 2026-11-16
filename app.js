@@ -1450,10 +1450,6 @@
           const fpRating = fp.rating ? fp.rating.toFixed(1) : 'New';
           const card = document.createElement('div');
           card.className = 'platform-access-card card-fitpass';
-          const fpDirectionsUrl = userCoords
-            ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${fp.lat || studio.lat},${fp.lng || studio.lng}`
-            : `https://www.google.com/maps/dir/?api=1&destination=${fp.lat || studio.lat},${fp.lng || studio.lng}`;
-
           card.innerHTML = `
             <div class="pac-header">
               <span class="pac-brand-badge" style="color: #0284C7;"><i class="fa-solid fa-ticket"></i> FITPASS</span>
@@ -1465,12 +1461,9 @@
               <div class="pac-detail"><i class="fa-solid fa-circle-check text-green-600"></i> Included in all FITPASS subscriptions</div>
               ${fp.address ? `<div class="pac-detail" style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(fp.address)}</div>` : ''}
             </div>
-            <div class="pac-footer-action" style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <a href="${fp.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitpass" style="flex: 1;">
+            <div class="pac-footer-action">
+              <a href="${fp.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitpass">
                 <span>View on FitPass</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              </a>
-              <a href="${fpDirectionsUrl}" target="_blank" rel="noopener noreferrer" class="pac-btn" style="background: #E0F2FE; color: #0284C7; flex: 1;" title="Get turn-by-turn directions to FitPass listed location">
-                <i class="fa-solid fa-diamond-turn-right"></i> <span>Directions</span>
               </a>
             </div>
           `;
@@ -1487,9 +1480,6 @@
           const tier = fs.tier || 'Standard';
           const card = document.createElement('div');
           card.className = 'platform-access-card card-fitsquare';
-          const fsDirectionsUrl = userCoords
-            ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${fs.lat || studio.lat},${fs.lng || studio.lng}`
-            : `https://www.google.com/maps/dir/?api=1&destination=${fs.lat || studio.lat},${fs.lng || studio.lng}`;
 
           card.innerHTML = `
             <div class="pac-header">
@@ -1502,14 +1492,10 @@
               <div class="pac-detail"><i class="fa-solid fa-tag text-orange-600"></i> Lifetime valid session pack access</div>
               ${fs.telephone ? `<div class="pac-detail"><i class="fa-solid fa-phone text-blue-600"></i> ${escapeHtml(fs.telephone)}</div>` : ''}
               ${fs.address ? `<div class="pac-detail" style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(fs.address)}</div>` : ''}
-              ${fs.coord_delta_meters && fs.coord_delta_meters > 15 ? `<div class="pac-detail" style="font-size: 10.5px; color: #D97706;"><i class="fa-solid fa-circle-info"></i> Pin variance from FitPass: ~${fs.coord_delta_meters}m</div>` : ''}
             </div>
-            <div class="pac-footer-action" style="display: flex; gap: 6px; flex-wrap: wrap;">
-              <a href="${fs.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitsquare" style="flex: 1;">
+            <div class="pac-footer-action">
+              <a href="${fs.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitsquare">
                 <span>View on FitSquare</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              </a>
-              <a href="${fsDirectionsUrl}" target="_blank" rel="noopener noreferrer" class="pac-btn" style="background: #FFEDD5; color: #EA580C; flex: 1;" title="Get turn-by-turn directions to FitSquare listed location">
-                <i class="fa-solid fa-diamond-turn-right"></i> <span>Directions</span>
               </a>
             </div>
           `;
