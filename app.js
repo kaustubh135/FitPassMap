@@ -1,6 +1,6 @@
 /**
- * FitPass Gym Map Explorer
- * Interactive Map & Directory for FitPass Studios near Oberoi Mall & Pan-India
+ * FitRadar Map
+ * Multi-Platform Fitness Center & Gym Pass Explorer across India (FitPass, FitSquare, and more)
  */
 
 (function () {
@@ -36,26 +36,8 @@
   let userLocationName = 'Detecting location...';
   let isLocationSet = false;
 
-  // Popular Location Hubs across India
-  const POPULAR_LOCATIONS = [
-    { name: 'Bandra West', city: 'Mumbai', lat: 19.0596, lng: 72.8295 },
-    { name: 'Goregaon (Oberoi)', city: 'Mumbai', lat: 19.1742, lng: 72.8604 },
-    { name: 'Andheri West', city: 'Mumbai', lat: 19.1364, lng: 72.8296 },
-    { name: 'Powai', city: 'Mumbai', lat: 19.1176, lng: 72.9060 },
-    { name: 'Thane West', city: 'Mumbai MMR', lat: 19.2183, lng: 72.9781 },
-    { name: 'Connaught Place', city: 'Delhi', lat: 28.6315, lng: 77.2167 },
-    { name: 'Saket', city: 'South Delhi', lat: 28.5244, lng: 77.2167 },
-    { name: 'Cyber City', city: 'Gurugram', lat: 28.4950, lng: 77.0895 },
-    { name: 'Sector 18', city: 'Noida', lat: 28.5708, lng: 77.3260 },
-    { name: 'Indiranagar', city: 'Bengaluru', lat: 12.9784, lng: 77.6408 },
-    { name: 'Koramangala', city: 'Bengaluru', lat: 12.9352, lng: 77.6245 },
-    { name: 'Whitefield', city: 'Bengaluru', lat: 12.9698, lng: 77.7499 },
-    { name: 'Koregaon Park', city: 'Pune', lat: 18.5362, lng: 73.8940 },
-    { name: 'Hinjawadi IT Park', city: 'Pune', lat: 18.5913, lng: 73.7389 },
-    { name: 'Hitec City', city: 'Hyderabad', lat: 17.4435, lng: 78.3772 },
-    { name: 'T. Nagar', city: 'Chennai', lat: 13.0418, lng: 80.2341 },
-    { name: 'Salt Lake', city: 'Kolkata', lat: 22.5867, lng: 88.4178 }
-  ];
+  // Storage Keys
+  const RECENT_SEARCHES_STORAGE_KEY = 'fitradar_recent_searches';
 
   // Tile Providers (100% Free, No API key needed, Universal compatibility)
   const TILE_STYLES = [
@@ -151,6 +133,9 @@
     clearLocationSearchBtn: document.getElementById('clearLocationSearchBtn'),
     submitLocationSearchBtn: document.getElementById('submitLocationSearchBtn'),
     locationResultsList: document.getElementById('locationResultsList'),
+    recentLocationsSection: document.getElementById('recentLocationsSection'),
+    recentLocationsGrid: document.getElementById('recentLocationsGrid'),
+    clearRecentBtn: document.getElementById('clearRecentBtn'),
     popularLocationsGrid: document.getElementById('popularLocationsGrid'),
     // Studio Modal Elements
     studioModalBackdrop: document.getElementById('studioModalBackdrop'),
@@ -356,6 +341,7 @@
       } catch (e) {
         console.warn('LocalStorage save failed:', e);
       }
+      addRecentSearch(name, lat, lng);
     }
 
     if (el.refLocationLabel) {
@@ -510,6 +496,8 @@
       }
     }
     if (el.locationModalBackdrop) {
+      renderRecentLocations();
+      populateMajorCities();
       el.locationModalBackdrop.classList.add('open');
       setTimeout(() => {
         if (el.locationSearchInput) el.locationSearchInput.focus();
@@ -530,25 +518,122 @@
   }
 
   /**
-   * Initialize Location Modal Controls & Popular Hubs
+   * Dynamically calculate major cities and their gym counts/centroids from the loaded dataset
+   */
+  function getTopCitiesFromData() {
+    if (!studiosData || !studiosData.length) return [];
+    const cityMap = new Map();
+    studiosData.forEach(s => {
+      const city = (s.city || '').trim();
+      if (!city || city === 'Unknown' || city.toLowerCase() === 'maharashtra' || city.length < 3) return;
+      if (!cityMap.has(city)) {
+        cityMap.set(city, { count: 0, latSum: 0, lngSum: 0 });
+      }
+      const entry = cityMap.get(city);
+      entry.count += 1;
+      entry.latSum += s.lat;
+      entry.lngSum += s.lng;
+    });
+
+    return Array.from(cityMap.entries())
+      .filter(([_, d]) => d.count >= 20)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([cityName, d]) => ({
+        name: cityName,
+        count: d.count,
+        lat: +(d.latSum / d.count).toFixed(6),
+        lng: +(d.lngSum / d.count).toFixed(6)
+      }));
+  }
+
+  function getRecentSearches() {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function addRecentSearch(name, lat, lng) {
+    if (!name || name === 'Detecting location...' || name.includes('Geolocation') || isNaN(lat) || isNaN(lng)) return;
+    try {
+      let recents = getRecentSearches();
+      // Remove duplicates by name or geographic proximity (< 1km)
+      recents = recents.filter(r => r.name.toLowerCase() !== name.toLowerCase() && (Math.abs(r.lat - lat) > 0.01 || Math.abs(r.lng - lng) > 0.01));
+      recents.unshift({ name, lat: +lat.toFixed(6), lng: +lng.toFixed(6), timestamp: Date.now() });
+      if (recents.length > 8) recents = recents.slice(0, 8);
+      localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(recents));
+      renderRecentLocations();
+    } catch (e) {
+      console.warn('Failed to save recent search:', e);
+    }
+  }
+
+  function renderRecentLocations() {
+    if (!el.recentLocationsSection || !el.recentLocationsGrid) return;
+    const recents = getRecentSearches();
+    if (!recents.length) {
+      el.recentLocationsSection.style.display = 'none';
+      el.recentLocationsGrid.innerHTML = '';
+      return;
+    }
+    el.recentLocationsSection.style.display = 'block';
+    el.recentLocationsGrid.innerHTML = '';
+    recents.forEach(item => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'popular-loc-pill recent-loc-pill';
+      btn.title = `Switch location to ${item.name}`;
+      btn.innerHTML = `
+        <i class="fa-solid fa-clock-rotate-left recent-pill-icon"></i>
+        <span class="truncate">${escapeHtml(item.name)}</span>
+      `;
+      btn.addEventListener('click', () => {
+        setUserLocation(item.lat, item.lng, item.name, true);
+        closeLocationModal();
+      });
+      el.recentLocationsGrid.appendChild(btn);
+    });
+  }
+
+  function populateMajorCities() {
+    if (!el.popularLocationsGrid) return;
+    el.popularLocationsGrid.innerHTML = '';
+    const topCities = getTopCitiesFromData();
+    topCities.forEach(city => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'popular-loc-pill';
+      btn.innerHTML = `
+        <span>${escapeHtml(city.name)}</span>
+        <span class="loc-city">${city.count} gyms</span>
+      `;
+      btn.addEventListener('click', () => {
+        setUserLocation(city.lat, city.lng, city.name, true);
+        closeLocationModal();
+      });
+      el.popularLocationsGrid.appendChild(btn);
+    });
+  }
+
+  /**
+   * Initialize Location Modal Controls & Dynamic Hubs
    */
   function initLocationModal() {
-    // Populate popular location buttons
-    if (el.popularLocationsGrid) {
-      el.popularLocationsGrid.innerHTML = '';
-      POPULAR_LOCATIONS.forEach(loc => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'popular-loc-pill';
-        btn.innerHTML = `
-          <span>${loc.name}</span>
-          <span class="loc-city">${loc.city}</span>
-        `;
-        btn.addEventListener('click', () => {
-          setUserLocation(loc.lat, loc.lng, `${loc.name}, ${loc.city}`, true);
-          closeLocationModal();
-        });
-        el.popularLocationsGrid.appendChild(btn);
+    // Populate recent locations
+    renderRecentLocations();
+
+    // Populate major cities dynamically calculated from gym density
+    populateMajorCities();
+
+    // Clear Recent button
+    if (el.clearRecentBtn) {
+      el.clearRecentBtn.addEventListener('click', () => {
+        try {
+          localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY);
+          renderRecentLocations();
+        } catch (e) {}
       });
     }
 

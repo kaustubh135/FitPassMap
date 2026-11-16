@@ -1,4 +1,4 @@
-# 🏋️‍♂️ Multi-Platform Gym Map Explorer (FitPass + FitSquare)
+# 📡 FitRadar Map — Multi-Platform Fitness Pass Explorer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Gyms Mapped](https://img.shields.io/badge/Gyms%20Mapped-2%2C680%20Unified-0284C7?style=flat&logo=target)](https://github.com/kaustubh135/FitPassMap)
@@ -6,7 +6,7 @@
 [![Weekly Sync](https://img.shields.io/badge/Weekly%20Sync-Every%20Sunday-success?logo=githubactions)](https://github.com/kaustubh135/FitPassMap/actions)
 [![Deployment](https://img.shields.io/badge/Deploy-GitHub%20Pages-success?logo=github)](https://kaustubh135.github.io/FitPassMap/)
 
-An interactive, high-performance web application that visualizes and aggregates fitness centers, gyms, and workout studios across multiple platforms (**FitPass**, **FitSquare**, and extensible to **Cult.fit** and others) on a responsive live map with entity deduplication, multi-platform badges, membership tier filters, canonical amenities, and side-by-side platform comparisons.
+**FitRadar Map** is an interactive, high-performance web application that visualizes and aggregates fitness centers, gyms, and workout studios across multiple platforms (**FitPass**, **FitSquare**, and extensible to **Cult.fit** and others) on a responsive live map with entity deduplication, multi-platform badges, membership tier filters, canonical amenities, and side-by-side platform comparisons.
 
 The platform currently maps **2,680 unified fitness locations** across 150+ Indian cities, including **104 dual-listed gyms** available on both FitPass and FitSquare simultaneously.
 

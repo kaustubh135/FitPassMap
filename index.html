@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FitPass Gym Map Explorer | Nationwide Fitness Center Finder</title>
-  <meta name="description" content="Interactive map of all Fitpass gyms and fitness studios across India with live GPS location, filters, ratings, amenities, and workout types.">
+  <title>FitRadar Map | Multi-Platform Gym & Fitness Pass Explorer</title>
+  <meta name="description" content="FitRadar Map — Real-time interactive map of gyms and fitness centers across India. Compare and discover locations across FitPass, FitSquare, and more.">
   <link rel="icon" type="image/svg+xml" href="public/favicon.svg">
   <link rel="icon" type="image/png" href="https://cdn.fitimg.in/studio_logo_63AA4A977C3235.png">
 
@@ -31,10 +31,8 @@
   <header class="app-header">
     <div class="brand-section">
       <a href="#" class="logo-badge">
-        <span class="fitpass-logo">FITPASS</span>
-        <span class="brand-divider">+</span>
-        <span class="fitsquare-logo">FITSQUARE</span>
-        <h1 class="brand-title">Map Explorer</h1>
+        <span class="fitradar-logo"><i class="fa-solid fa-radar"></i> FITRADAR</span>
+        <h1 class="brand-title">Map</h1>
       </a>
       <button class="location-indicator" id="changeLocationBtn" title="Click to change your location">
         <span class="pulsing-dot"></span>
@@ -149,7 +147,7 @@
 
           <!-- Workout Types Filter -->
           <div>
-            <div class="filter-section-title">Workout Activities (FitPass Categories)</div>
+            <div class="filter-section-title">Workout Activities</div>
             <div class="chips-cloud" id="workoutChipsContainer">
               <!-- Workout chips will be rendered here dynamically -->
             </div>
@@ -343,7 +341,7 @@
           </div>
           <div>
             <h2 class="location-modal-title">Set Your Location</h2>
-            <p class="location-modal-subtitle">Find FitPass gyms & fitness clubs near you</p>
+            <p class="location-modal-subtitle">Find gyms & fitness centers near you across all pass networks</p>
           </div>
         </div>
         <button class="modal-close-btn" id="locationModalCloseBtn" aria-label="Close location modal">
@@ -388,13 +386,22 @@
         <!-- Search Results Dropdown / List -->
         <div class="location-results-list" id="locationResultsList" style="display: none;"></div>
 
-        <!-- Popular Locations Grid -->
+        <!-- Recent Searches Section (dynamically populated from searches) -->
+        <div class="recent-locations-section" id="recentLocationsSection" style="display: none;">
+          <div class="popular-title">
+            <span><i class="fa-solid fa-clock-rotate-left text-indigo-500"></i> Recent Searches</span>
+            <button type="button" class="btn-clear-recent" id="clearRecentBtn">Clear</button>
+          </div>
+          <div class="popular-locations-grid" id="recentLocationsGrid"></div>
+        </div>
+
+        <!-- Major Cities Grid (dynamically calculated from gym density) -->
         <div class="popular-locations-section">
           <div class="popular-title">
-            <i class="fa-solid fa-fire text-amber-500"></i> Popular Cities & Hubs
+            <span><i class="fa-solid fa-city text-blue-500"></i> Major Cities</span>
           </div>
           <div class="popular-locations-grid" id="popularLocationsGrid">
-            <!-- Dynamically populated -->
+            <!-- Dynamically populated from dataset -->
           </div>
         </div>
       </div>

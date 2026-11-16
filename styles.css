@@ -71,6 +71,21 @@ body {
   color: inherit;
 }
 
+.fitradar-logo {
+  height: 28px;
+  background: linear-gradient(135deg, #EF4444 0%, #D97706 100%);
+  color: white;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.8px;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25);
+}
+
 .fitpass-logo {
   height: 28px;
   background: var(--primary);
@@ -1494,6 +1509,12 @@ body {
   flex-shrink: 0;
 }
 
+.recent-locations-section {
+  margin-top: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
+}
+
 .popular-locations-section {
   margin-top: 14px;
 }
@@ -1507,7 +1528,44 @@ body {
   margin-bottom: 10px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.popular-title > span {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+}
+
+.btn-clear-recent {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  color: var(--text-subtle);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-clear-recent:hover {
+  color: var(--primary);
+  background: #FEE2E2;
+}
+
+.recent-pill-icon {
+  color: #6366F1;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.recent-loc-pill {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px;
+  padding: 7px 10px;
 }
 
 .popular-locations-grid {
@@ -1944,4 +2002,6 @@ body {
   .map-control-btn { background: #161F2E; border-color: #2D3748; color: #F7FAFC; }
   .map-control-btn:hover { background: #1E2D42; }
   .map-legend { background: rgba(22, 31, 46, 0.95); border-color: #2D3748; color: #F7FAFC; }
+  .recent-locations-section { border-bottom-color: #2D3748; }
+  .btn-clear-recent:hover { background: #374151; color: #F87171; }
 }
