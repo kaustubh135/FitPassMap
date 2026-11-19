@@ -87,11 +87,12 @@ function parseGymPage(html, url) {
     }
 
     // 2. Extract membership tier (Basic / Premium / Elite)
+    // IMPORTANT: "Category: <tier>" in the gym's own meta description identifies THIS gym,
+    // while "data-category=..." can match the suggested gyms carousel at the bottom of the page.
     let tier = 'Standard';
     const tierMatch =
-      html.match(/data-category="([A-Z]+)"/i) ||
       html.match(/Category:\s*([a-zA-Z]+)/i) ||
-      html.match(/class="oct-gym-category"[^>]*>([a-zA-Z]+)</i);
+      html.match(/data-category="([A-Z]+)"/i);
 
     if (tierMatch && tierMatch[1]) {
       const val = tierMatch[1].trim().toUpperCase();
@@ -123,6 +124,15 @@ function parseGymPage(html, url) {
       for (const a of gymData.amenityFeature) {
         if (a && a.name && !amenities.includes(a.name.trim())) {
           amenities.push(a.name.trim());
+        }
+      }
+    }
+    const amenMatch = html.match(/Amenities:\s*([^.]+)\./i);
+    if (amenMatch && amenMatch[1]) {
+      const list = amenMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      for (const item of list) {
+        if (!amenities.includes(item)) {
+          amenities.push(item);
         }
       }
     }

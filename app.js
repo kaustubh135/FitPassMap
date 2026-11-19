@@ -73,15 +73,39 @@
     }
   ];
 
-  // Amenity Icons Mapping
+  // Amenity Icons Mapping (Canonical Dictionary)
   const AMENITY_ICONS = {
+    'Air Conditioning': 'fa-solid fa-snowflake',
     'Air Conditioner': 'fa-solid fa-snowflake',
-    'Parking': 'fa-solid fa-square-parking',
+    'AC': 'fa-solid fa-snowflake',
+    'Free Wi-Fi': 'fa-solid fa-wifi',
     'WiFi': 'fa-solid fa-wifi',
-    'Water Cooler': 'fa-solid fa-glass-water',
+    'Parking': 'fa-solid fa-square-parking',
+    'Car Parking': 'fa-solid fa-car',
+    'Bike Parking': 'fa-solid fa-motorcycle',
+    'Lockers': 'fa-solid fa-lock',
     'Locker': 'fa-solid fa-lock',
+    'Showers': 'fa-solid fa-shower',
+    'Changing Room': 'fa-solid fa-person-booth',
+    'Drinking Water': 'fa-solid fa-glass-water',
+    'Water Cooler': 'fa-solid fa-glass-water',
+    'CCTV Surveillance': 'fa-solid fa-video',
+    'Sauna': 'fa-solid fa-hot-tub-person',
+    'Steam Bath': 'fa-solid fa-bath',
+    'Cafeteria / Juice Bar': 'fa-solid fa-mug-hot',
     'Cafeteria': 'fa-solid fa-mug-hot',
-    'Certified Trainers': 'fa-solid fa-user-tie'
+    'Certified Trainers': 'fa-solid fa-user-tie',
+    'Accessibility': 'fa-solid fa-wheelchair',
+    'Wheel Chair Accessibile': 'fa-solid fa-wheelchair',
+    'First Aid': 'fa-solid fa-kit-medical',
+    'Restrooms': 'fa-solid fa-restroom',
+    'Restrooms (Men)': 'fa-solid fa-person',
+    'Restrooms (Women)': 'fa-solid fa-person-dress',
+    'Hand Sanitizers': 'fa-solid fa-pump-medical',
+    'Shoe Rack': 'fa-solid fa-shoe-prints',
+    'Ice Bath': 'fa-solid fa-icicles',
+    'Lounge Area': 'fa-solid fa-couch',
+    'Security': 'fa-solid fa-shield-halved'
   };
 
   // Top Workouts to emphasize
@@ -127,6 +151,9 @@
     locationModalBackdrop: document.getElementById('locationModalBackdrop'),
     locationModalCloseBtn: document.getElementById('locationModalCloseBtn'),
     useGpsBtn: document.getElementById('useGpsBtn'),
+    dropPinManualBtn: document.getElementById('dropPinManualBtn'),
+    mapPinBanner: document.getElementById('mapPinBanner'),
+    cancelPinModeBtn: document.getElementById('cancelPinModeBtn'),
     locationNotice: document.getElementById('locationNotice'),
     locationNoticeText: document.getElementById('locationNoticeText'),
     locationSearchInput: document.getElementById('locationSearchInput'),
@@ -617,6 +644,89 @@
     });
   }
 
+  let isManualPinMode = false;
+
+  /**
+   * Enter manual map pin dropping mode
+   */
+  function startManualPinMode() {
+    isManualPinMode = true;
+    closeLocationModal();
+
+    if (el.mapPinBanner) {
+      el.mapPinBanner.style.display = 'flex';
+    }
+
+    const mapContainer = document.querySelector('.map-container');
+    if (mapContainer) {
+      mapContainer.classList.add('map-pin-mode');
+    }
+
+    // Switch to map view on mobile devices so user immediately sees the map
+    if (window.innerWidth <= 900) {
+      el.appContainer.className = 'app-container show-map';
+      if (el.mobileShowMapBtn) el.mobileShowMapBtn.classList.add('active');
+      if (el.mobileShowListBtn) el.mobileShowListBtn.classList.remove('active');
+      setTimeout(() => map && map.invalidateSize(), 200);
+    }
+
+    if (map) {
+      map.once('click', handleManualPinClick);
+    }
+  }
+
+  /**
+   * Cancel manual map pin dropping mode
+   */
+  function cancelManualPinMode() {
+    isManualPinMode = false;
+    if (el.mapPinBanner) {
+      el.mapPinBanner.style.display = 'none';
+    }
+    const mapContainer = document.querySelector('.map-container');
+    if (mapContainer) {
+      mapContainer.classList.remove('map-pin-mode');
+    }
+    if (map) {
+      map.off('click', handleManualPinClick);
+    }
+  }
+
+  /**
+   * Handle user clicking on the map during manual pin mode
+   */
+  async function handleManualPinClick(e) {
+    if (!isManualPinMode) return;
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    cancelManualPinMode();
+
+    let placeName = `Custom Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+    // Attempt reverse geocoding to give a friendly place name
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) {
+          const parts = [
+            data.address.suburb || data.address.neighbourhood || data.address.commercial || data.address.road || data.address.residential,
+            data.address.city || data.address.town || data.address.city_district || data.address.state_district
+          ].filter(Boolean);
+          if (parts.length > 0) {
+            placeName = parts.join(', ');
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Reverse geocoding error:', err);
+    }
+
+    setUserLocation(lat, lng, placeName, true);
+    addRecentSearch(placeName, lat, lng);
+  }
+
   /**
    * Initialize Location Modal Controls & Dynamic Hubs
    */
@@ -635,6 +745,16 @@
           renderRecentLocations();
         } catch (e) {}
       });
+    }
+
+    // Manual Pin Drop Button
+    if (el.dropPinManualBtn) {
+      el.dropPinManualBtn.addEventListener('click', startManualPinMode);
+    }
+
+    // Cancel Pin Mode Button
+    if (el.cancelPinModeBtn) {
+      el.cancelPinModeBtn.addEventListener('click', cancelManualPinMode);
     }
 
     // Close button
@@ -1314,6 +1434,16 @@
             <div class="popup-workouts">
               ${(studio.workouts || []).slice(0, 3).map(w => `<span class="workout-tag">${escapeHtml(w)}</span>`).join('')}
             </div>
+
+            ${(studio.amenities && studio.amenities.length > 0) ? `
+              <div class="popup-amenities">
+                ${studio.amenities.slice(0, 5).map(a => {
+                  const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
+                  return `<span class="popup-amenity-badge" title="${escapeHtml(a)}"><i class="${icon}"></i> <span>${escapeHtml(a)}</span></span>`;
+                }).join('')}
+                ${studio.amenities.length > 5 ? `<span class="popup-amenity-badge popup-amenity-more">+${studio.amenities.length - 5}</span>` : ''}
+              </div>
+            ` : ''}
 
             <button class="popup-btn" onclick="window.viewStudioDetails('${studio.id}')">
               <i class="fa-solid fa-circle-info"></i> View Full Details

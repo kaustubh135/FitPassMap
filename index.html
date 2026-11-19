@@ -187,6 +187,17 @@
     <section class="map-container">
       <div id="map"></div>
 
+      <!-- Manual Pin Drop Banner -->
+      <div id="mapPinBanner" class="map-pin-banner" style="display: none;">
+        <div class="map-pin-banner-content">
+          <i class="fa-solid fa-map-pin map-pin-pulse-icon"></i>
+          <span>Click anywhere on the map to place your search pin</span>
+        </div>
+        <button type="button" class="btn-cancel-pin" id="cancelPinModeBtn">
+          <i class="fa-solid fa-xmark"></i> <span>Cancel</span>
+        </button>
+      </div>
+
       <!-- Floating Map Controls -->
       <div class="map-floating-controls">
         <button class="map-control-btn" id="mapFitBoundsBtn" title="Fit map to show all currently filtered gyms">
@@ -363,6 +374,16 @@
             <div class="gps-btn-sub">Detect automatically via device GPS</div>
           </div>
           <span class="gps-badge">Auto</span>
+        </button>
+
+        <!-- Manual Map Pin Option -->
+        <button class="btn-use-gps btn-pin-manual" id="dropPinManualBtn" type="button" style="margin-top: 8px;">
+          <i class="fa-solid fa-map-pin" style="color: #F59E0B;"></i>
+          <div class="gps-btn-text">
+            <div class="gps-btn-title">Choose Location on Map</div>
+            <div class="gps-btn-sub">Click anywhere on the map to drop a custom pin</div>
+          </div>
+          <span class="gps-badge" style="background: #D97706;">Manual</span>
         </button>
 
         <div class="location-divider">
