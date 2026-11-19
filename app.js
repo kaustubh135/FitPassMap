@@ -1,45 +1,50 @@
 /**
  * FitRadar Map
- * Multi-Platform Fitness Center & Gym Pass Explorer across India (FitPass, FitSquare, and more)
+ * Multi-Platform Gym & Fitness Pass Explorer across India (FitPass, FitSquare, and more)
  */
 
 (function () {
   'use strict';
 
-  // State Management
+  // Global State
   let allStudios = [];
   let filteredStudios = [];
   let map = null;
   let markerCluster = null;
-  let studioMarkersMap = new Map(); // id -> L.marker
+  let studioMarkersMap = new Map();
   let userMarker = null;
   let currentTileIndex = 0;
   let tileLayers = [];
   let activeStudio = null;
+  let isManualPinMode = false;
 
   // Filter States
   const filterState = {
     search: '',
-    maxDistance: 5, // default 5 km from active location
+    maxDistance: 5,
     rating4Plus: false,
     verifiedOnly: false,
     openNowOnly: false,
     selectedWorkouts: new Set(),
     selectedAmenities: new Set(),
-    selectedPlatforms: new Set(['fitpass', 'fitsquare']), // Both enabled by default
-    selectedTiers: new Set(), // Dynamically extracted tiers
+    selectedPlatforms: new Set(['fitpass', 'fitsquare']),
+    selectedTiers: new Set(),
     sortBy: 'distance_asc'
   };
 
-  // Dynamic User Location State
-  let userCoords = [19.0760, 72.8777]; // Fallback placeholder: Mumbai
+  // User Location State
+  let userCoords = [19.0760, 72.8777]; // Default Mumbai
   let userLocationName = 'Detecting location...';
   let isLocationSet = false;
 
   // Storage Keys
-  const RECENT_SEARCHES_STORAGE_KEY = 'fitradar_recent_searches';
+  const STORAGE_KEY_LOCATION = 'fitpass_user_location';
+  const STORAGE_KEY_RECENTS = 'fitradar_recent_searches';
 
-  // Tile Providers (100% Free, No API key needed, Universal compatibility)
+  // Mobile Bottom Sheet States: 'peek', 'half', 'expanded'
+  let mobileSheetState = 'peek';
+
+  // Tile Providers (Universal compatibility, no API keys required)
   const TILE_STYLES = [
     {
       name: 'OpenStreetMap (Standard)',
@@ -56,24 +61,24 @@
     {
       name: 'Esri World Street Map',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
+      attribution: 'Tiles &copy; Esri',
       maxZoom: 19
     },
     {
-      name: 'Carto Voyager (Clean Colorful)',
+      name: 'Carto Voyager (Clean)',
       url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19
     },
     {
       name: 'Carto Dark (Night Mode)',
       url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19
     }
   ];
 
-  // Amenity Icons Mapping (Canonical Dictionary)
+  // Canonical Amenity Dictionary with FontAwesome 6 classes
   const AMENITY_ICONS = {
     'Air Conditioning': 'fa-solid fa-snowflake',
     'Air Conditioner': 'fa-solid fa-snowflake',
@@ -108,148 +113,206 @@
     'Security': 'fa-solid fa-shield-halved'
   };
 
-  // Top Workouts to emphasize
   const POPULAR_WORKOUTS = [
     'Gym Workout', 'Yoga', 'Zumba', 'HIIT', 'Crossfit', 'Swimming',
     'Pilates', 'Strength Training', 'Core', 'Cardio', 'Abs Workout',
     'MMA', 'Combat', 'Dance', 'Gym Workout (Women Only)'
   ];
 
-  // DOM Elements
-  const el = {
-    map: document.getElementById('map'),
-    appContainer: document.getElementById('appContainer'),
-    studiosList: document.getElementById('studiosList'),
-    searchInput: document.getElementById('searchInput'),
-    clearSearchBtn: document.getElementById('clearSearchBtn'),
-    distancePresets: document.getElementById('distancePresets'),
-    distanceRangeSlider: document.getElementById('distanceRangeSlider'),
-    sliderDistanceVal: document.getElementById('sliderDistanceVal'),
-    toggleFiltersDrawerBtn: document.getElementById('toggleFiltersDrawerBtn'),
-    filtersDrawer: document.getElementById('filtersDrawer'),
-    activeFilterBadge: document.getElementById('activeFilterBadge'),
-    ratingFilterBtn: document.getElementById('ratingFilterBtn'),
-    verifiedFilterBtn: document.getElementById('verifiedFilterBtn'),
-    openNowFilterBtn: document.getElementById('openNowFilterBtn'),
-    resetFiltersBtn: document.getElementById('resetFiltersBtn'),
-    sortSelect: document.getElementById('sortSelect'),
-    resultsCountLabel: document.getElementById('resultsCountLabel'),
-    headerCounterBadge: document.getElementById('headerCounterBadge'),
-    changeLocationBtn: document.getElementById('changeLocationBtn'),
-    refLocationLabel: document.getElementById('refLocationLabel'),
-    legendUserLabel: document.getElementById('legendUserLabel'),
-    recenterBtn: document.getElementById('recenterBtn'),
-    mapCenterMeBtn: document.getElementById('mapCenterMeBtn'),
-    mapFitBoundsBtn: document.getElementById('mapFitBoundsBtn'),
-    toggleTileLayerBtn: document.getElementById('toggleTileLayerBtn'),
-    workoutChipsContainer: document.getElementById('workoutChipsContainer'),
-    amenityChipsContainer: document.getElementById('amenityChipsContainer'),
-    mobileShowListBtn: document.getElementById('mobileShowListBtn'),
-    mobileShowMapBtn: document.getElementById('mobileShowMapBtn'),
-    mobileCount: document.getElementById('mobileCount'),
-    // Location Modal Elements
-    locationModalBackdrop: document.getElementById('locationModalBackdrop'),
-    locationModalCloseBtn: document.getElementById('locationModalCloseBtn'),
-    useGpsBtn: document.getElementById('useGpsBtn'),
-    dropPinManualBtn: document.getElementById('dropPinManualBtn'),
-    mapPinBanner: document.getElementById('mapPinBanner'),
-    cancelPinModeBtn: document.getElementById('cancelPinModeBtn'),
-    locationNotice: document.getElementById('locationNotice'),
-    locationNoticeText: document.getElementById('locationNoticeText'),
-    locationSearchInput: document.getElementById('locationSearchInput'),
-    clearLocationSearchBtn: document.getElementById('clearLocationSearchBtn'),
-    submitLocationSearchBtn: document.getElementById('submitLocationSearchBtn'),
-    locationResultsList: document.getElementById('locationResultsList'),
-    recentLocationsSection: document.getElementById('recentLocationsSection'),
-    recentLocationsGrid: document.getElementById('recentLocationsGrid'),
-    clearRecentBtn: document.getElementById('clearRecentBtn'),
-    popularLocationsGrid: document.getElementById('popularLocationsGrid'),
-    // Studio Modal Elements
-    studioModalBackdrop: document.getElementById('studioModalBackdrop'),
-    modalCloseBtn: document.getElementById('modalCloseBtn'),
-    modalBannerImg: document.getElementById('modalBannerImg'),
-    modalLogoImg: document.getElementById('modalLogoImg'),
-    modalStudioName: document.getElementById('modalStudioName'),
-    modalStudioAddress: document.getElementById('modalStudioAddress'),
-    modalAddressText: document.getElementById('modalAddressText'),
-    copyAddressBtn: document.getElementById('copyAddressBtn'),
-    modalBadgesRow: document.getElementById('modalBadgesRow'),
-    modalAmenitiesSection: document.getElementById('modalAmenitiesSection'),
-    modalAmenitiesGrid: document.getElementById('modalAmenitiesGrid'),
-    modalWorkoutsList: document.getElementById('modalWorkoutsList'),
-    modalAboutSection: document.getElementById('modalAboutSection'),
-    modalAboutText: document.getElementById('modalAboutText'),
-    modalGallerySection: document.getElementById('modalGallerySection'),
-    modalGalleryGrid: document.getElementById('modalGalleryGrid'),
-    modalReviewsSection: document.getElementById('modalReviewsSection'),
-    modalReviewsList: document.getElementById('modalReviewsList'),
-    modalFitpassLink: document.getElementById('modalFitpassLink'),
-    modalGoogleMapsLink: document.getElementById('modalGoogleMapsLink'),
-    // Multi-Platform Elements
-    togglePlatformFitpass: document.getElementById('togglePlatformFitpass'),
-    togglePlatformFitsquare: document.getElementById('togglePlatformFitsquare'),
-    countBadgeFitpass: document.getElementById('countBadgeFitpass'),
-    countBadgeFitsquare: document.getElementById('countBadgeFitsquare'),
-    tierChipsContainer: document.getElementById('tierChipsContainer'),
-    modalPlatformsSection: document.getElementById('modalPlatformsSection'),
-    modalPlatformCardsGrid: document.getElementById('modalPlatformCardsGrid'),
-    modalPlatformButtonsContainer: document.getElementById('modalPlatformButtonsContainer')
-  };
+  // DOM Elements Cache
+  const el = {};
+
+  function queryElements() {
+    el.map = document.getElementById('map');
+    el.changeLocationBtn = document.getElementById('changeLocationBtn');
+    el.refLocationLabel = document.getElementById('refLocationLabel');
+    el.headerGymCountText = document.getElementById('headerGymCountText');
+    el.searchInput = document.getElementById('searchInput');
+    el.clearSearchBtn = document.getElementById('clearSearchBtn');
+    el.mobileSearchInput = document.getElementById('mobileSearchInput');
+    el.clearMobileSearchBtn = document.getElementById('clearMobileSearchBtn');
+    el.recenterBtn = document.getElementById('recenterBtn');
+    el.toggleTileLayerBtn = document.getElementById('toggleTileLayerBtn');
+    el.openMobileFiltersBtn = document.getElementById('openMobileFiltersBtn');
+    el.mobileFilterBadge = document.getElementById('mobileFilterBadge');
+
+    // Filter strip elements
+    el.togglePlatformFitpass = document.getElementById('togglePlatformFitpass');
+    el.togglePlatformFitsquare = document.getElementById('togglePlatformFitsquare');
+    el.countBadgeFitpass = document.getElementById('countBadgeFitpass');
+    el.countBadgeFitsquare = document.getElementById('countBadgeFitsquare');
+
+    el.distancePillBtn = document.getElementById('distancePillBtn');
+    el.distancePillLabel = document.getElementById('distancePillLabel');
+    el.distanceDropdownWrapper = document.getElementById('distanceDropdownWrapper');
+    el.distanceMenu = document.getElementById('distanceMenu');
+    el.distanceRangeSlider = document.getElementById('distanceRangeSlider');
+    el.sliderValLabel = document.getElementById('sliderValLabel');
+
+    el.ratingFilterBtn = document.getElementById('ratingFilterBtn');
+    el.openNowFilterBtn = document.getElementById('openNowFilterBtn');
+    el.verifiedFilterBtn = document.getElementById('verifiedFilterBtn');
+    el.resetFiltersBtn = document.getElementById('resetFiltersBtn');
+
+    el.tierPillBtn = document.getElementById('tierPillBtn');
+    el.tierPillLabel = document.getElementById('tierPillLabel');
+    el.tierDropdownWrapper = document.getElementById('tierDropdownWrapper');
+    el.tierChipsContainer = document.getElementById('tierChipsContainer');
+
+    el.workoutPillBtn = document.getElementById('workoutPillBtn');
+    el.workoutPillLabel = document.getElementById('workoutPillLabel');
+    el.workoutDropdownWrapper = document.getElementById('workoutDropdownWrapper');
+    el.workoutChipsContainer = document.getElementById('workoutChipsContainer');
+
+    el.amenityPillBtn = document.getElementById('amenityPillBtn');
+    el.amenityPillLabel = document.getElementById('amenityPillLabel');
+    el.amenityDropdownWrapper = document.getElementById('amenityDropdownWrapper');
+    el.amenityChipsContainer = document.getElementById('amenityChipsContainer');
+
+    // Sidebar & Map
+    el.studiosList = document.getElementById('studiosList');
+    el.resultsCountLabel = document.getElementById('resultsCountLabel');
+    el.resultsSubtitle = document.getElementById('resultsSubtitle');
+    el.sortSelect = document.getElementById('sortSelect');
+    el.mapPinBanner = document.getElementById('mapPinBanner');
+    el.cancelPinModeBtn = document.getElementById('cancelPinModeBtn');
+    el.mapFitBoundsBtn = document.getElementById('mapFitBoundsBtn');
+    el.mapCenterMeBtn = document.getElementById('mapCenterMeBtn');
+    el.legendUserLabel = document.getElementById('legendUserLabel');
+
+    // Mobile Elements
+    el.mobileBottomSheet = document.getElementById('mobileBottomSheet');
+    el.sheetDragHandle = document.getElementById('sheetDragHandle');
+    el.sheetGymCount = document.getElementById('sheetGymCount');
+    el.sheetLocationSub = document.getElementById('sheetLocationSub');
+    el.mobileSortSelect = document.getElementById('mobileSortSelect');
+    el.sheetExpandToggleBtn = document.getElementById('sheetExpandToggleBtn');
+    el.mobileCardsList = document.getElementById('mobileCardsList');
+    el.mobileFloatingPill = document.getElementById('mobileFloatingPill');
+    el.mobileViewToggleBtn = document.getElementById('mobileViewToggleBtn');
+    el.viewToggleIcon = document.getElementById('viewToggleIcon');
+    el.viewToggleLabel = document.getElementById('viewToggleLabel');
+    el.mobileCountBadge = document.getElementById('mobileCountBadge');
+
+    // Mobile Preview Card
+    el.mobilePreviewCard = document.getElementById('mobilePreviewCard');
+    el.closePreviewCardBtn = document.getElementById('closePreviewCardBtn');
+    el.previewCardContent = document.getElementById('previewCardContent');
+
+    // Studio Detail Modal
+    el.studioModalBackdrop = document.getElementById('studioModalBackdrop');
+    el.modalCloseBtn = document.getElementById('modalCloseBtn');
+    el.modalBannerImg = document.getElementById('modalBannerImg');
+    el.modalLogoImg = document.getElementById('modalLogoImg');
+    el.modalStudioName = document.getElementById('modalStudioName');
+    el.modalStudioAddress = document.getElementById('modalStudioAddress');
+    el.modalAddressText = document.getElementById('modalAddressText');
+    el.copyAddressBtn = document.getElementById('copyAddressBtn');
+    el.modalBadgesRow = document.getElementById('modalBadgesRow');
+    el.modalPlatformCardsGrid = document.getElementById('modalPlatformCardsGrid');
+    el.modalAmenitiesSection = document.getElementById('modalAmenitiesSection');
+    el.modalAmenitiesGrid = document.getElementById('modalAmenitiesGrid');
+    el.modalWorkoutsSection = document.getElementById('modalWorkoutsSection');
+    el.modalWorkoutsList = document.getElementById('modalWorkoutsList');
+    el.modalAboutSection = document.getElementById('modalAboutSection');
+    el.modalAboutText = document.getElementById('modalAboutText');
+    el.modalGallerySection = document.getElementById('modalGallerySection');
+    el.modalGalleryGrid = document.getElementById('modalGalleryGrid');
+    el.modalReviewsSection = document.getElementById('modalReviewsSection');
+    el.modalReviewsList = document.getElementById('modalReviewsList');
+    el.modalPlatformButtonsContainer = document.getElementById('modalPlatformButtonsContainer');
+    el.modalGoogleMapsLink = document.getElementById('modalGoogleMapsLink');
+
+    // Location Selector Modal
+    el.locationModalBackdrop = document.getElementById('locationModalBackdrop');
+    el.locationModalCloseBtn = document.getElementById('locationModalCloseBtn');
+    el.useGpsBtn = document.getElementById('useGpsBtn');
+    el.dropPinManualBtn = document.getElementById('dropPinManualBtn');
+    el.locationNotice = document.getElementById('locationNotice');
+    el.locationNoticeText = document.getElementById('locationNoticeText');
+    el.locationSearchInput = document.getElementById('locationSearchInput');
+    el.clearLocationSearchBtn = document.getElementById('clearLocationSearchBtn');
+    el.submitLocationSearchBtn = document.getElementById('submitLocationSearchBtn');
+    el.locationResultsList = document.getElementById('locationResultsList');
+    el.recentLocationsSection = document.getElementById('recentLocationsSection');
+    el.recentLocationsGrid = document.getElementById('recentLocationsGrid');
+    el.clearRecentBtn = document.getElementById('clearRecentBtn');
+    el.popularLocationsGrid = document.getElementById('popularLocationsGrid');
+
+    // Mobile Filters Modal
+    el.mobileFilterModalBackdrop = document.getElementById('mobileFilterModalBackdrop');
+    el.closeMobileFilterModalBtn = document.getElementById('closeMobileFilterModalBtn');
+    el.mobileSliderDistanceVal = document.getElementById('mobileSliderDistanceVal');
+    el.mobileDistancePresets = document.getElementById('mobileDistancePresets');
+    el.mobileTierChipsContainer = document.getElementById('mobileTierChipsContainer');
+    el.mobileWorkoutChipsContainer = document.getElementById('mobileWorkoutChipsContainer');
+    el.mobileAmenityChipsContainer = document.getElementById('mobileAmenityChipsContainer');
+    el.mobileResetAllFiltersBtn = document.getElementById('mobileResetAllFiltersBtn');
+    el.mobileApplyFiltersBtn = document.getElementById('mobileApplyFiltersBtn');
+  }
 
   /**
-   * Initialize App
+   * Main App Initialization
    */
   async function init() {
-    loadData();
-    initMap();
-    initFiltersUI();
-    initLocationModal();
-    bindEvents();
+    queryElements();
+    loadDataset();
+    initLeafletMap();
+    initFiltersData();
+    initLocationModalHandlers();
+    bindUserEvents();
     initUserLocation();
+    setMobileSheetState('peek');
   }
 
   /**
    * Load Data from window.STUDIOS_DATA or window.FITPASS_DATA or fetch fallback
    */
-  function loadData() {
+  function loadDataset() {
     const raw = window.STUDIOS_DATA || window.FITPASS_DATA;
     if (raw && raw.studios) {
       allStudios = raw.studios;
-      console.log(`Loaded ${allStudios.length} studios from STUDIOS_DATA`);
-      
-      // Update platform count badges if metadata exists
+      console.log(`Loaded ${allStudios.length} gyms from dataset`);
       if (raw.metadata && raw.metadata.platformCounts) {
         if (el.countBadgeFitpass) el.countBadgeFitpass.textContent = raw.metadata.platformCounts.fitpass.toLocaleString();
         if (el.countBadgeFitsquare) el.countBadgeFitsquare.textContent = raw.metadata.platformCounts.fitsquare.toLocaleString();
       }
     } else {
-      console.warn("window.STUDIOS_DATA not found. Trying fetch fallback...");
+      console.warn("STUDIOS_DATA not found synchronously. Trying fetch fallback...");
       fetch('studios_data.json')
         .then(res => res.json())
         .then(data => {
-          allStudios = data.studios;
+          allStudios = data.studios || [];
           if (data.metadata && data.metadata.platformCounts) {
             if (el.countBadgeFitpass) el.countBadgeFitpass.textContent = data.metadata.platformCounts.fitpass.toLocaleString();
             if (el.countBadgeFitsquare) el.countBadgeFitsquare.textContent = data.metadata.platformCounts.fitsquare.toLocaleString();
           }
-          initFiltersUI();
+          initFiltersData();
           applyFilters();
         })
         .catch(err => {
-          console.error("Failed to load studios data:", err);
-          el.studiosList.innerHTML = `<div class="empty-state">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <h3>Data Not Loaded</h3>
-            <p>Please ensure studios_data.js or studios_data.json is present.</p>
-          </div>`;
+          console.error("Failed to load studios dataset:", err);
+          showDataLoadError();
         });
     }
   }
 
+  function showDataLoadError() {
+    const html = `
+      <div class="empty-state">
+        <div class="empty-state-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <h3>Failed to Load Gyms</h3>
+        <p>Could not load the gym directory data. Please check your network connection and reload.</p>
+      </div>
+    `;
+    if (el.studiosList) el.studiosList.innerHTML = html;
+    if (el.mobileCardsList) el.mobileCardsList.innerHTML = html;
+  }
+
   /**
-   * Initialize Leaflet Map
+   * Initialize Leaflet Map & Tile Layers
    */
-  function initMap() {
+  function initLeafletMap() {
     map = L.map('map', {
       center: userCoords,
       zoom: 13,
@@ -258,31 +321,15 @@
       minZoom: 4
     });
 
-    // Base Maps Object for Layer Switcher
-    const baseLayersMap = {};
-
-    // Setup Tile Layers
     TILE_STYLES.forEach((style, index) => {
       const layer = L.tileLayer(style.url, {
         attribution: style.attribution,
         maxZoom: style.maxZoom || 19,
         subdomains: style.subdomains || 'abc'
       });
-
-      // Handle tile error fallback
-      layer.on('tileerror', function(error, tile) {
-        console.warn(`Tile failed to load: ${error.url}`);
-      });
-
       tileLayers.push(layer);
-      baseLayersMap[style.name] = layer;
-
-      // Add first layer as default
       if (index === 0) layer.addTo(map);
     });
-
-    // Add Native Leaflet Layer Switcher Control
-    L.control.layers(baseLayersMap, null, { position: 'topright', collapsed: true }).addTo(map);
 
     // User Beacon Marker
     const userIcon = L.divIcon({
@@ -298,41 +345,36 @@
         <div style="padding: 10px; font-family: inherit;">
           <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
           <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(userLocationName)}</div>
-          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
+          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search origin</div>
         </div>
       `, { offset: [0, -6] });
 
-    // Marker Cluster Group
+    // MarkerCluster Group
     markerCluster = L.markerClusterGroup({
       chunkedLoading: true,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
       zoomToBoundsOnClick: true,
-      maxClusterRadius: 45
+      maxClusterRadius: 40
     });
 
     map.addLayer(markerCluster);
 
-    // Ensure map tiles are sized and rendered properly across all viewports
-    const fixMapSize = () => {
-      if (map) {
-        map.invalidateSize();
-      }
+    // Responsive map invalidateSize
+    const refreshMapSize = () => {
+      if (map) map.invalidateSize();
     };
-
-    setTimeout(fixMapSize, 100);
-    setTimeout(fixMapSize, 400);
-    setTimeout(fixMapSize, 1000);
-    window.addEventListener('resize', fixMapSize);
-    window.addEventListener('load', fixMapSize);
+    setTimeout(refreshMapSize, 150);
+    setTimeout(refreshMapSize, 600);
+    window.addEventListener('resize', refreshMapSize);
   }
 
   /**
-   * Calculate Great-Circle Distance between two coordinates in Kilometers (Haversine Formula)
+   * Haversine Great-Circle Distance (Kilometers)
    */
   function calcDistanceKm(lat1, lon1, lat2, lon2) {
     if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 9999;
-    const R = 6371; // Earth's mean radius in km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a =
@@ -343,10 +385,7 @@
     return Math.round(R * c * 10) / 10;
   }
 
-  /**
-   * Recalculate distances for all studios relative to current userCoords
-   */
-  function recalculateDistances() {
+  function recalculateAllDistances() {
     if (!userCoords) return;
     const [uLat, uLng] = userCoords;
     allStudios.forEach(s => {
@@ -355,7 +394,7 @@
   }
 
   /**
-   * Set active user location, update marker, center map, recalculate distances & re-apply filters
+   * Update active user origin location
    */
   function setUserLocation(lat, lng, name, saveToStorage = true) {
     userCoords = [lat, lng];
@@ -364,10 +403,8 @@
 
     if (saveToStorage) {
       try {
-        localStorage.setItem('fitpass_user_location', JSON.stringify({ lat, lng, name }));
-      } catch (e) {
-        console.warn('LocalStorage save failed:', e);
-      }
+        localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify({ lat, lng, name }));
+      } catch (e) {}
       addRecentSearch(name, lat, lng);
     }
 
@@ -378,32 +415,16 @@
     if (el.legendUserLabel) {
       el.legendUserLabel.textContent = `You (${name.split(',')[0]})`;
     }
+    if (el.sheetLocationSub) {
+      el.sheetLocationSub.textContent = `Within ${filterState.maxDistance === 99999 ? 'all' : filterState.maxDistance + ' km'} of ${name.split(',')[0]}`;
+    }
 
-    // Recompute distances for all 2,574 gyms
-    recalculateDistances();
+    recalculateAllDistances();
 
-    // Update or create user beacon marker
     if (map) {
-      if (!userMarker) {
-        const userIcon = L.divIcon({
-          className: 'user-marker-icon',
-          html: '<div class="user-beacon"></div>',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
-        userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 }).addTo(map);
-      } else {
+      if (userMarker) {
         userMarker.setLatLng(userCoords);
       }
-
-      userMarker.bindPopup(`
-        <div style="padding: 10px; font-family: inherit;">
-          <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(name)}</div>
-          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
-        </div>
-      `, { offset: [0, -6] });
-
       map.setView(userCoords, 13, { animate: true });
     }
 
@@ -411,9 +432,9 @@
   }
 
   /**
-   * Reverse Geocode coordinates to friendly neighborhood/city name via Nominatim
+   * Reverse Geocoding with Nominatim
    */
-  async function reverseGeocode(lat, lng) {
+  async function reverseGeocodeCoords(lat, lng) {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
@@ -425,25 +446,12 @@
       const cleanName = [locality, city].filter(Boolean).join(', ') || data.name || 'Current Location';
 
       userLocationName = cleanName;
-      if (el.refLocationLabel) {
-        el.refLocationLabel.textContent = cleanName;
-        el.refLocationLabel.title = `Active search location: ${cleanName} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-      }
-      if (el.legendUserLabel) {
-        el.legendUserLabel.textContent = `You (${cleanName.split(',')[0]})`;
-      }
-      if (userMarker) {
-        userMarker.bindPopup(`
-          <div style="padding: 10px; font-family: inherit;">
-            <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
-            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(cleanName)}</div>
-            <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search reference origin</div>
-          </div>
-        `, { offset: [0, -6] });
-      }
+      if (el.refLocationLabel) el.refLocationLabel.textContent = cleanName;
+      if (el.legendUserLabel) el.legendUserLabel.textContent = `You (${cleanName.split(',')[0]})`;
+      if (el.sheetLocationSub) el.sheetLocationSub.textContent = `Within ${filterState.maxDistance === 99999 ? 'all' : filterState.maxDistance + ' km'} of ${cleanName.split(',')[0]}`;
 
       try {
-        localStorage.setItem('fitpass_user_location', JSON.stringify({ lat, lng, name: cleanName }));
+        localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify({ lat, lng, name: cleanName }));
       } catch (e) {}
     } catch (e) {
       console.warn('Reverse geocoding error:', e);
@@ -451,16 +459,16 @@
   }
 
   /**
-   * Request device location via browser Geolocation API
+   * Request device location via Geolocation API
    */
   function requestDeviceLocation(fromUserClick = false) {
     if (!('geolocation' in navigator)) {
-      openLocationModal(true, 'Geolocation is not supported by your browser. Please select or search your city.');
+      openLocationModal(true, 'Geolocation is not supported by your browser.');
       return;
     }
 
     if (fromUserClick && el.useGpsBtn) {
-      const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+      const titleEl = el.useGpsBtn.querySelector('.loc-card-title');
       if (titleEl) titleEl.textContent = 'Detecting GPS coordinates...';
     }
 
@@ -469,32 +477,31 @@
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setUserLocation(lat, lng, 'Current Location', true);
-        reverseGeocode(lat, lng);
+        reverseGeocodeCoords(lat, lng);
         closeLocationModal();
         if (fromUserClick && el.useGpsBtn) {
-          const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+          const titleEl = el.useGpsBtn.querySelector('.loc-card-title');
           if (titleEl) titleEl.textContent = 'Use My Current Location';
         }
       },
       (err) => {
         console.warn('Geolocation denied or failed:', err);
         if (fromUserClick && el.useGpsBtn) {
-          const titleEl = el.useGpsBtn.querySelector('.gps-btn-title');
+          const titleEl = el.useGpsBtn.querySelector('.loc-card-title');
           if (titleEl) titleEl.textContent = 'Use My Current Location';
         }
-        openLocationModal(true, 'Location access was not enabled or timed out. Please enter your city or choose a popular hub below.');
+        openLocationModal(true, 'Location access was not enabled or timed out. Please choose or search your city below.');
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
     );
   }
 
   /**
-   * Initialize User Location on Application Launch
+   * Initialize user location on launch
    */
   function initUserLocation() {
-    // 1. Check if user already has a saved preference in localStorage
     try {
-      const saved = localStorage.getItem('fitpass_user_location');
+      const saved = localStorage.getItem(STORAGE_KEY_LOCATION);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
@@ -502,50 +509,14 @@
           return;
         }
       }
-    } catch (e) {
-      console.warn('LocalStorage load error:', e);
-    }
+    } catch (e) {}
 
-    // 2. Request device location
+    // Fallback: try GPS detection
     requestDeviceLocation(false);
   }
 
   /**
-   * Open Location Picker Modal
-   */
-  function openLocationModal(showNotice = false, noticeMsg = '') {
-    if (el.locationNotice && el.locationNoticeText) {
-      if (showNotice && noticeMsg) {
-        el.locationNoticeText.textContent = noticeMsg;
-        el.locationNotice.style.display = 'flex';
-      } else {
-        el.locationNotice.style.display = 'none';
-      }
-    }
-    if (el.locationModalBackdrop) {
-      renderRecentLocations();
-      populateMajorCities();
-      el.locationModalBackdrop.classList.add('open');
-      setTimeout(() => {
-        if (el.locationSearchInput) el.locationSearchInput.focus();
-      }, 150);
-    }
-  }
-
-  /**
-   * Close Location Picker Modal
-   */
-  function closeLocationModal() {
-    if (el.locationModalBackdrop) {
-      el.locationModalBackdrop.classList.remove('open');
-    }
-    if (el.locationResultsList) {
-      el.locationResultsList.style.display = 'none';
-    }
-  }
-
-  /**
-   * Dynamically calculate major cities and their gym counts/centroids from the loaded dataset
+   * Dynamic Major Cities from Gym Density
    */
   function getTopCitiesFromData() {
     if (!allStudios || !allStudios.length) return [];
@@ -576,7 +547,7 @@
 
   function getRecentSearches() {
     try {
-      return JSON.parse(localStorage.getItem(RECENT_SEARCHES_STORAGE_KEY) || '[]');
+      return JSON.parse(localStorage.getItem(STORAGE_KEY_RECENTS) || '[]');
     } catch (e) {
       return [];
     }
@@ -586,15 +557,12 @@
     if (!name || name === 'Detecting location...' || name.includes('Geolocation') || isNaN(lat) || isNaN(lng)) return;
     try {
       let recents = getRecentSearches();
-      // Remove duplicates by name or geographic proximity (< 1km)
       recents = recents.filter(r => r.name.toLowerCase() !== name.toLowerCase() && (Math.abs(r.lat - lat) > 0.01 || Math.abs(r.lng - lng) > 0.01));
       recents.unshift({ name, lat: +lat.toFixed(6), lng: +lng.toFixed(6), timestamp: Date.now() });
       if (recents.length > 8) recents = recents.slice(0, 8);
-      localStorage.setItem(RECENT_SEARCHES_STORAGE_KEY, JSON.stringify(recents));
+      localStorage.setItem(STORAGE_KEY_RECENTS, JSON.stringify(recents));
       renderRecentLocations();
-    } catch (e) {
-      console.warn('Failed to save recent search:', e);
-    }
+    } catch (e) {}
   }
 
   function renderRecentLocations() {
@@ -605,16 +573,15 @@
       el.recentLocationsGrid.innerHTML = '';
       return;
     }
-    el.recentLocationsSection.style.display = 'block';
+    el.recentLocationsSection.style.display = 'flex';
     el.recentLocationsGrid.innerHTML = '';
     recents.forEach(item => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'popular-loc-pill recent-loc-pill';
-      btn.title = `Switch location to ${item.name}`;
+      btn.className = 'loc-pill';
       btn.innerHTML = `
-        <i class="fa-solid fa-clock-rotate-left recent-pill-icon"></i>
-        <span class="truncate">${escapeHtml(item.name)}</span>
+        <i class="fa-solid fa-clock-rotate-left text-indigo-500"></i>
+        <span>${escapeHtml(item.name)}</span>
       `;
       btn.addEventListener('click', () => {
         setUserLocation(item.lat, item.lng, item.name, true);
@@ -631,10 +598,10 @@
     topCities.forEach(city => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'popular-loc-pill';
+      btn.className = 'loc-pill';
       btn.innerHTML = `
         <span>${escapeHtml(city.name)}</span>
-        <span class="loc-city">${city.count} gyms</span>
+        <span class="loc-pill-badge">(${city.count})</span>
       `;
       btn.addEventListener('click', () => {
         setUserLocation(city.lat, city.lng, city.name, true);
@@ -644,67 +611,36 @@
     });
   }
 
-  let isManualPinMode = false;
-
   /**
-   * Enter manual map pin dropping mode
+   * Manual Pin Placement Mode
    */
   function startManualPinMode() {
     isManualPinMode = true;
     closeLocationModal();
 
-    if (el.mapPinBanner) {
-      el.mapPinBanner.style.display = 'flex';
-    }
-
-    const mapContainer = document.querySelector('.map-container');
-    if (mapContainer) {
-      mapContainer.classList.add('map-pin-mode');
-    }
-
-    // Switch to map view on mobile devices so user immediately sees the map
-    if (window.innerWidth <= 900) {
-      el.appContainer.className = 'app-container show-map';
-      if (el.mobileShowMapBtn) el.mobileShowMapBtn.classList.add('active');
-      if (el.mobileShowListBtn) el.mobileShowListBtn.classList.remove('active');
-      setTimeout(() => map && map.invalidateSize(), 200);
-    }
+    if (el.mapPinBanner) el.mapPinBanner.style.display = 'flex';
+    setMobileSheetState('peek');
 
     if (map) {
       map.once('click', handleManualPinClick);
     }
   }
 
-  /**
-   * Cancel manual map pin dropping mode
-   */
   function cancelManualPinMode() {
     isManualPinMode = false;
-    if (el.mapPinBanner) {
-      el.mapPinBanner.style.display = 'none';
-    }
-    const mapContainer = document.querySelector('.map-container');
-    if (mapContainer) {
-      mapContainer.classList.remove('map-pin-mode');
-    }
+    if (el.mapPinBanner) el.mapPinBanner.style.display = 'none';
     if (map) {
       map.off('click', handleManualPinClick);
     }
   }
 
-  /**
-   * Handle user clicking on the map during manual pin mode
-   */
   async function handleManualPinClick(e) {
     if (!isManualPinMode) return;
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
-
     cancelManualPinMode();
 
-    let placeName = `Custom Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-
-    // Attempt reverse geocoding to give a friendly place name
+    let placeName = `Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`);
       if (res.ok) {
@@ -712,71 +648,53 @@
         if (data && data.address) {
           const parts = [
             data.address.suburb || data.address.neighbourhood || data.address.commercial || data.address.road || data.address.residential,
-            data.address.city || data.address.town || data.address.city_district || data.address.state_district
+            data.address.city || data.address.town || data.address.city_district
           ].filter(Boolean);
-          if (parts.length > 0) {
-            placeName = parts.join(', ');
-          }
+          if (parts.length > 0) placeName = parts.join(', ');
         }
       }
-    } catch (err) {
-      console.warn('Reverse geocoding error:', err);
-    }
+    } catch (err) {}
 
     setUserLocation(lat, lng, placeName, true);
-    addRecentSearch(placeName, lat, lng);
   }
 
   /**
-   * Initialize Location Modal Controls & Dynamic Hubs
+   * Initialize Location Modal Controls
    */
-  function initLocationModal() {
-    // Populate recent locations
+  function initLocationModalHandlers() {
     renderRecentLocations();
-
-    // Populate major cities dynamically calculated from gym density
     populateMajorCities();
 
-    // Clear Recent button
-    if (el.clearRecentBtn) {
-      el.clearRecentBtn.addEventListener('click', () => {
-        try {
-          localStorage.removeItem(RECENT_SEARCHES_STORAGE_KEY);
-          renderRecentLocations();
-        } catch (e) {}
-      });
+    if (el.changeLocationBtn) {
+      el.changeLocationBtn.addEventListener('click', () => openLocationModal(false));
     }
-
-    // Manual Pin Drop Button
-    if (el.dropPinManualBtn) {
-      el.dropPinManualBtn.addEventListener('click', startManualPinMode);
-    }
-
-    // Cancel Pin Mode Button
-    if (el.cancelPinModeBtn) {
-      el.cancelPinModeBtn.addEventListener('click', cancelManualPinMode);
-    }
-
-    // Close button
     if (el.locationModalCloseBtn) {
       el.locationModalCloseBtn.addEventListener('click', closeLocationModal);
     }
-
-    // Click outside modal to close
     if (el.locationModalBackdrop) {
       el.locationModalBackdrop.addEventListener('click', (e) => {
         if (e.target === el.locationModalBackdrop) closeLocationModal();
       });
     }
 
-    // GPS Button Click
     if (el.useGpsBtn) {
-      el.useGpsBtn.addEventListener('click', () => {
-        requestDeviceLocation(true);
+      el.useGpsBtn.addEventListener('click', () => requestDeviceLocation(true));
+    }
+    if (el.dropPinManualBtn) {
+      el.dropPinManualBtn.addEventListener('click', startManualPinMode);
+    }
+    if (el.cancelPinModeBtn) {
+      el.cancelPinModeBtn.addEventListener('click', cancelManualPinMode);
+    }
+    if (el.clearRecentBtn) {
+      el.clearRecentBtn.addEventListener('click', () => {
+        try {
+          localStorage.removeItem(STORAGE_KEY_RECENTS);
+          renderRecentLocations();
+        } catch (e) {}
       });
     }
 
-    // Clear Search Input Button
     if (el.clearLocationSearchBtn) {
       el.clearLocationSearchBtn.addEventListener('click', () => {
         el.locationSearchInput.value = '';
@@ -786,15 +704,11 @@
       });
     }
 
-    // Search Input Typing (toggle clear icon & handle enter)
     if (el.locationSearchInput) {
       el.locationSearchInput.addEventListener('input', (e) => {
         const hasVal = e.target.value.trim().length > 0;
-        if (el.clearLocationSearchBtn) {
-          el.clearLocationSearchBtn.classList.toggle('visible', hasVal);
-        }
+        if (el.clearLocationSearchBtn) el.clearLocationSearchBtn.classList.toggle('visible', hasVal);
       });
-
       el.locationSearchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -803,15 +717,35 @@
       });
     }
 
-    // Submit Search Button
     if (el.submitLocationSearchBtn) {
       el.submitLocationSearchBtn.addEventListener('click', executeLocationSearch);
     }
   }
 
-  /**
-   * Execute location geocoding search using OpenStreetMap Nominatim
-   */
+  function openLocationModal(showNotice = false, noticeMsg = '') {
+    if (el.locationNotice && el.locationNoticeText) {
+      if (showNotice && noticeMsg) {
+        el.locationNoticeText.textContent = noticeMsg;
+        el.locationNotice.style.display = 'flex';
+      } else {
+        el.locationNotice.style.display = 'none';
+      }
+    }
+    if (el.locationModalBackdrop) {
+      renderRecentLocations();
+      populateMajorCities();
+      el.locationModalBackdrop.classList.add('open');
+      setTimeout(() => {
+        if (el.locationSearchInput) el.locationSearchInput.focus();
+      }, 150);
+    }
+  }
+
+  function closeLocationModal() {
+    if (el.locationModalBackdrop) el.locationModalBackdrop.classList.remove('open');
+    if (el.locationResultsList) el.locationResultsList.style.display = 'none';
+  }
+
   async function executeLocationSearch() {
     const query = (el.locationSearchInput.value || '').trim();
     if (!query) return;
@@ -821,7 +755,7 @@
     el.locationResultsList.style.display = 'block';
     el.locationResultsList.innerHTML = `
       <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
-        <i class="fa-solid fa-spinner fa-spin"></i> Searching locations across India...
+        <i class="fa-solid fa-spinner fa-spin"></i> Searching locations...
       </div>
     `;
 
@@ -833,18 +767,18 @@
 
       if (!results || results.length === 0) {
         el.locationResultsList.innerHTML = `
-          <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12.5px;">
-            No locations found for "<strong>${escapeHtml(query)}</strong>". Try searching for a neighborhood, landmark, or city name.
+          <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
+            No locations found for "<strong>${escapeHtml(query)}</strong>".
           </div>
         `;
       } else {
         el.locationResultsList.innerHTML = '';
         results.forEach(item => {
           const div = document.createElement('div');
-          div.className = 'location-result-item';
+          div.className = 'loc-result-item';
           const parts = item.display_name.split(',').map(s => s.trim());
           const primaryName = parts.slice(0, 2).join(', ');
-          const secondaryName = parts.slice(2, 5).join(', ');
+          const secondaryName = parts.slice(2, 4).join(', ');
 
           div.innerHTML = `
             <i class="fa-solid fa-location-dot"></i>
@@ -866,10 +800,9 @@
         });
       }
     } catch (err) {
-      console.warn('Geocoding search error:', err);
       el.locationResultsList.innerHTML = `
-        <div style="padding: 12px; text-align: center; color: #EF4444; font-size: 12px;">
-          Unable to search right now. Please select one of the popular cities below.
+        <div style="padding: 12px; text-align: center; color: var(--primary); font-size: 12px;">
+          Unable to search right now. Please select one of the cities below.
         </div>
       `;
     } finally {
@@ -879,16 +812,51 @@
   }
 
   /**
-   * Initialize Filter UI Options (Workout & Amenity Chips)
+   * Initialize Dynamic Filters Options (Tiers, Workouts, Amenities)
    */
-  function initFiltersUI() {
-    // Workout Chips
-    const availableWorkouts = new Set();
-    allStudios.forEach(s => {
-      (s.workouts || []).forEach(w => availableWorkouts.add(w));
-    });
+  function initFiltersData() {
+    // 1. FitSquare Tiers
+    const rawData = window.STUDIOS_DATA || window.FITPASS_DATA;
+    let tiers = (rawData && rawData.metadata && rawData.metadata.tiers) ? rawData.metadata.tiers : [];
+    if (!tiers || tiers.length === 0) {
+      const collected = new Set();
+      allStudios.forEach(s => {
+        if (s.platform_details && s.platform_details.fitsquare && s.platform_details.fitsquare.tier) {
+          collected.add(s.platform_details.fitsquare.tier);
+        }
+      });
+      tiers = Array.from(collected).sort();
+    }
 
-    // Combine popular first, then others
+    const renderTierChips = (container) => {
+      if (!container) return;
+      container.innerHTML = '';
+      tiers.forEach(tier => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-item';
+        btn.dataset.tier = tier;
+        btn.innerHTML = `<i class="fa-solid fa-id-badge text-orange-500"></i><span>${escapeHtml(tier)}</span>`;
+        btn.addEventListener('click', () => {
+          if (filterState.selectedTiers.has(tier)) {
+            filterState.selectedTiers.delete(tier);
+            btn.classList.remove('active');
+          } else {
+            filterState.selectedTiers.add(tier);
+            btn.classList.add('active');
+          }
+          syncTierPillLabel();
+          applyFilters();
+        });
+        container.appendChild(btn);
+      });
+    };
+    renderTierChips(el.tierChipsContainer);
+    renderTierChips(el.mobileTierChipsContainer);
+
+    // 2. Workouts
+    const availableWorkouts = new Set();
+    allStudios.forEach(s => (s.workouts || []).forEach(w => availableWorkouts.add(w)));
     const sortedWorkouts = Array.from(availableWorkouts).sort((a, b) => {
       const aPop = POPULAR_WORKOUTS.indexOf(a);
       const bPop = POPULAR_WORKOUTS.indexOf(b);
@@ -898,99 +866,93 @@
       return a.localeCompare(b);
     });
 
-    el.workoutChipsContainer.innerHTML = '';
-    sortedWorkouts.slice(0, 25).forEach(workout => {
-      const chip = document.createElement('button');
-      chip.className = 'filter-chip';
-      chip.textContent = workout;
-      chip.dataset.workout = workout;
-      chip.addEventListener('click', () => {
-        if (filterState.selectedWorkouts.has(workout)) {
-          filterState.selectedWorkouts.delete(workout);
-          chip.classList.remove('active');
-        } else {
-          filterState.selectedWorkouts.add(workout);
-          chip.classList.add('active');
-        }
-        updateActiveFilterBadge();
-        applyFilters();
-      });
-      el.workoutChipsContainer.appendChild(chip);
-    });
-
-    // Amenity Chips
-    const standardAmenities = Object.keys(AMENITY_ICONS);
-    el.amenityChipsContainer.innerHTML = '';
-    standardAmenities.forEach(amenity => {
-      const chip = document.createElement('button');
-      chip.className = 'filter-chip';
-      const iconClass = AMENITY_ICONS[amenity] || 'fa-solid fa-check';
-      chip.innerHTML = `<i class="${iconClass}"></i><span>${amenity}</span>`;
-      chip.dataset.amenity = amenity;
-      chip.addEventListener('click', () => {
-        if (filterState.selectedAmenities.has(amenity)) {
-          filterState.selectedAmenities.delete(amenity);
-          chip.classList.remove('active');
-        } else {
-          filterState.selectedAmenities.add(amenity);
-          chip.classList.add('active');
-        }
-        updateActiveFilterBadge();
-        applyFilters();
-      });
-      el.amenityChipsContainer.appendChild(chip);
-    });
-
-    // Membership Tier Chips (Dynamic - Basic, Premium, Elite, etc.)
-    if (el.tierChipsContainer) {
-      const rawData = window.STUDIOS_DATA || window.FITPASS_DATA;
-      let tiers = (rawData && rawData.metadata && rawData.metadata.tiers) ? rawData.metadata.tiers : [];
-      if (!tiers || tiers.length === 0) {
-        // Collect from allStudios if metadata is empty
-        const collected = new Set();
-        allStudios.forEach(s => {
-          if (s.platform_details && s.platform_details.fitsquare && s.platform_details.fitsquare.tier) {
-            collected.add(s.platform_details.fitsquare.tier);
-          }
-        });
-        tiers = Array.from(collected).sort();
-      }
-
-      el.tierChipsContainer.innerHTML = '';
-      tiers.forEach(tier => {
-        const chip = document.createElement('button');
-        chip.className = 'filter-chip';
-        chip.innerHTML = `<i class="fa-solid fa-id-badge"></i><span>${escapeHtml(tier)}</span>`;
-        chip.dataset.tier = tier;
-        chip.addEventListener('click', () => {
-          if (filterState.selectedTiers.has(tier)) {
-            filterState.selectedTiers.delete(tier);
-            chip.classList.remove('active');
+    const renderWorkoutChips = (container) => {
+      if (!container) return;
+      container.innerHTML = '';
+      sortedWorkouts.slice(0, 24).forEach(workout => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-item';
+        btn.dataset.workout = workout;
+        btn.innerHTML = `<i class="fa-solid fa-dumbbell"></i><span>${escapeHtml(workout)}</span>`;
+        btn.addEventListener('click', () => {
+          if (filterState.selectedWorkouts.has(workout)) {
+            filterState.selectedWorkouts.delete(workout);
+            btn.classList.remove('active');
           } else {
-            filterState.selectedTiers.add(tier);
-            chip.classList.add('active');
+            filterState.selectedWorkouts.add(workout);
+            btn.classList.add('active');
           }
-          updateActiveFilterBadge();
+          syncWorkoutPillLabel();
           applyFilters();
         });
-        el.tierChipsContainer.appendChild(chip);
+        container.appendChild(btn);
       });
-    }
+    };
+    renderWorkoutChips(el.workoutChipsContainer);
+    renderWorkoutChips(el.mobileWorkoutChipsContainer);
+
+    // 3. Amenities
+    const standardAmenities = Object.keys(AMENITY_ICONS);
+    const renderAmenityChips = (container) => {
+      if (!container) return;
+      container.innerHTML = '';
+      standardAmenities.forEach(amenity => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-item';
+        btn.dataset.amenity = amenity;
+        const iconClass = AMENITY_ICONS[amenity] || 'fa-solid fa-check';
+        btn.innerHTML = `<i class="${iconClass}"></i><span>${escapeHtml(amenity)}</span>`;
+        btn.addEventListener('click', () => {
+          if (filterState.selectedAmenities.has(amenity)) {
+            filterState.selectedAmenities.delete(amenity);
+            btn.classList.remove('active');
+          } else {
+            filterState.selectedAmenities.add(amenity);
+            btn.classList.add('active');
+          }
+          syncAmenityPillLabel();
+          applyFilters();
+        });
+        container.appendChild(btn);
+      });
+    };
+    renderAmenityChips(el.amenityChipsContainer);
+    renderAmenityChips(el.mobileAmenityChipsContainer);
+  }
+
+  function syncTierPillLabel() {
+    if (!el.tierPillLabel) return;
+    const count = filterState.selectedTiers.size;
+    el.tierPillLabel.textContent = count === 0 ? 'All Tiers' : `Tiers (${count})`;
+    el.tierPillBtn.classList.toggle('active', count > 0);
+  }
+
+  function syncWorkoutPillLabel() {
+    if (!el.workoutPillLabel) return;
+    const count = filterState.selectedWorkouts.size;
+    el.workoutPillLabel.textContent = count === 0 ? 'Workouts' : `Workouts (${count})`;
+    el.workoutPillBtn.classList.toggle('active', count > 0);
+  }
+
+  function syncAmenityPillLabel() {
+    if (!el.amenityPillLabel) return;
+    const count = filterState.selectedAmenities.size;
+    el.amenityPillLabel.textContent = count === 0 ? 'Amenities' : `Amenities (${count})`;
+    el.amenityPillBtn.classList.toggle('active', count > 0);
   }
 
   /**
-   * Bind DOM Events
+   * Bind User Interface Events
    */
-  function bindEvents() {
-    // Platform Toggles (FitPass, FitSquare)
+  function bindUserEvents() {
+    // Platform Toggles
     const setupPlatformToggle = (btn, platformKey) => {
       if (!btn) return;
       btn.addEventListener('click', () => {
         if (filterState.selectedPlatforms.has(platformKey)) {
-          // Guard: keep at least 1 platform selected
-          if (filterState.selectedPlatforms.size === 1) {
-            return;
-          }
+          if (filterState.selectedPlatforms.size === 1) return; // Keep at least one
           filterState.selectedPlatforms.delete(platformKey);
           btn.classList.remove('active');
         } else {
@@ -1003,180 +965,403 @@
     setupPlatformToggle(el.togglePlatformFitpass, 'fitpass');
     setupPlatformToggle(el.togglePlatformFitsquare, 'fitsquare');
 
-    // Search Input
+    // Desktop Search Input
     let debounceTimer = null;
-    el.searchInput.addEventListener('input', (e) => {
+    const handleSearchInput = (val) => {
       clearTimeout(debounceTimer);
-      const val = e.target.value.trim();
-      el.clearSearchBtn.classList.toggle('visible', val.length > 0);
+      if (el.clearSearchBtn) el.clearSearchBtn.classList.toggle('visible', val.length > 0);
+      if (el.clearMobileSearchBtn) el.clearMobileSearchBtn.classList.toggle('visible', val.length > 0);
       debounceTimer = setTimeout(() => {
         filterState.search = val.toLowerCase();
         applyFilters();
       }, 200);
-    });
+    };
 
-    el.clearSearchBtn.addEventListener('click', () => {
-      el.searchInput.value = '';
-      el.clearSearchBtn.classList.remove('visible');
-      filterState.search = '';
-      applyFilters();
-    });
-
-    // Distance Presets Click
-    el.distancePresets.addEventListener('click', (e) => {
-      const pill = e.target.closest('.dist-pill');
-      if (!pill) return;
-
-      document.querySelectorAll('#distancePresets .dist-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-
-      const dist = pill.dataset.distance;
-      if (dist === 'all') {
-        filterState.maxDistance = 99999;
-        el.distanceRangeSlider.value = 50;
-        el.sliderDistanceVal.textContent = 'All India';
-      } else {
-        const val = parseFloat(dist);
-        filterState.maxDistance = val;
-        el.distanceRangeSlider.value = Math.min(50, val);
-        el.sliderDistanceVal.textContent = `${val} km`;
-      }
-      applyFilters();
-    });
-
-    // Distance Slider
-    el.distanceRangeSlider.addEventListener('input', (e) => {
-      const val = parseInt(e.target.value, 10);
-      filterState.maxDistance = val;
-      el.sliderDistanceVal.textContent = `${val} km`;
-
-      // Update preset pills active state
-      document.querySelectorAll('#distancePresets .dist-pill').forEach(p => {
-        p.classList.toggle('active', parseFloat(p.dataset.distance) === val);
+    if (el.searchInput) {
+      el.searchInput.addEventListener('input', (e) => {
+        if (el.mobileSearchInput) el.mobileSearchInput.value = e.target.value;
+        handleSearchInput(e.target.value.trim());
       });
+    }
 
-      applyFilters();
-    });
+    if (el.clearSearchBtn) {
+      el.clearSearchBtn.addEventListener('click', () => {
+        el.searchInput.value = '';
+        if (el.mobileSearchInput) el.mobileSearchInput.value = '';
+        handleSearchInput('');
+      });
+    }
 
-    // Toggle Filters Drawer
-    el.toggleFiltersDrawerBtn.addEventListener('click', () => {
-      const isOpen = el.filtersDrawer.classList.toggle('open');
-      el.toggleFiltersDrawerBtn.classList.toggle('active', isOpen);
+    // Mobile Search Input
+    if (el.mobileSearchInput) {
+      el.mobileSearchInput.addEventListener('input', (e) => {
+        if (el.searchInput) el.searchInput.value = e.target.value;
+        handleSearchInput(e.target.value.trim());
+      });
+    }
+
+    if (el.clearMobileSearchBtn) {
+      el.clearMobileSearchBtn.addEventListener('click', () => {
+        el.mobileSearchInput.value = '';
+        if (el.searchInput) el.searchInput.value = '';
+        handleSearchInput('');
+      });
+    }
+
+    // Distance Dropdown & Presets
+    if (el.distancePillBtn && el.distanceDropdownWrapper) {
+      el.distancePillBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllDropdowns(el.distanceDropdownWrapper);
+        el.distanceDropdownWrapper.classList.toggle('open');
+      });
+    }
+
+    if (el.distanceMenu) {
+      el.distanceMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('.menu-item');
+        if (!item) return;
+        el.distanceMenu.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+        item.classList.add('active');
+
+        const dist = item.dataset.distance;
+        setDistanceFilter(dist === 'all' ? 99999 : parseFloat(dist));
+        el.distanceDropdownWrapper.classList.remove('open');
+      });
+    }
+
+    if (el.distanceRangeSlider) {
+      el.distanceRangeSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        setDistanceFilter(val);
+      });
+    }
+
+    if (el.mobileDistancePresets) {
+      el.mobileDistancePresets.addEventListener('click', (e) => {
+        const btn = e.target.closest('.dist-btn');
+        if (!btn) return;
+        const dist = btn.dataset.distance;
+        setDistanceFilter(dist === 'all' ? 99999 : parseFloat(dist));
+      });
+    }
+
+    // Tiers Dropdown
+    if (el.tierPillBtn && el.tierDropdownWrapper) {
+      el.tierPillBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllDropdowns(el.tierDropdownWrapper);
+        el.tierDropdownWrapper.classList.toggle('open');
+      });
+    }
+
+    // Workouts Dropdown
+    if (el.workoutPillBtn && el.workoutDropdownWrapper) {
+      el.workoutPillBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllDropdowns(el.workoutDropdownWrapper);
+        el.workoutDropdownWrapper.classList.toggle('open');
+      });
+    }
+
+    // Amenities Dropdown
+    if (el.amenityPillBtn && el.amenityDropdownWrapper) {
+      el.amenityPillBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllDropdowns(el.amenityDropdownWrapper);
+        el.amenityDropdownWrapper.classList.toggle('open');
+      });
+    }
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.filter-dropdown-wrapper')) {
+        closeAllDropdowns(null);
+      }
     });
 
     // Quick Filter: Rating 4.0+
-    el.ratingFilterBtn.addEventListener('click', () => {
-      filterState.rating4Plus = !filterState.rating4Plus;
-      el.ratingFilterBtn.classList.toggle('active', filterState.rating4Plus);
-      updateActiveFilterBadge();
-      applyFilters();
-    });
-
-    // Quick Filter: Verified Only
-    el.verifiedFilterBtn.addEventListener('click', () => {
-      filterState.verifiedOnly = !filterState.verifiedOnly;
-      el.verifiedFilterBtn.classList.toggle('active', filterState.verifiedOnly);
-      updateActiveFilterBadge();
-      applyFilters();
-    });
+    if (el.ratingFilterBtn) {
+      el.ratingFilterBtn.addEventListener('click', () => {
+        filterState.rating4Plus = !filterState.rating4Plus;
+        el.ratingFilterBtn.classList.toggle('active', filterState.rating4Plus);
+        applyFilters();
+      });
+    }
 
     // Quick Filter: Open Now
-    el.openNowFilterBtn.addEventListener('click', () => {
-      filterState.openNowOnly = !filterState.openNowOnly;
-      el.openNowFilterBtn.classList.toggle('active', filterState.openNowOnly);
-      updateActiveFilterBadge();
-      applyFilters();
-    });
+    if (el.openNowFilterBtn) {
+      el.openNowFilterBtn.addEventListener('click', () => {
+        filterState.openNowOnly = !filterState.openNowOnly;
+        el.openNowFilterBtn.classList.toggle('active', filterState.openNowOnly);
+        applyFilters();
+      });
+    }
 
-    // Reset All Filters
-    el.resetFiltersBtn.addEventListener('click', resetAllFilters);
+    // Quick Filter: Verified Only
+    if (el.verifiedFilterBtn) {
+      el.verifiedFilterBtn.addEventListener('click', () => {
+        filterState.verifiedOnly = !filterState.verifiedOnly;
+        el.verifiedFilterBtn.classList.toggle('active', filterState.verifiedOnly);
+        applyFilters();
+      });
+    }
 
-    // Sort Dropdown
-    el.sortSelect.addEventListener('change', (e) => {
-      filterState.sortBy = e.target.value;
-      applyFilters();
-    });
+    // Reset Filters
+    if (el.resetFiltersBtn) {
+      el.resetFiltersBtn.addEventListener('click', resetAllFilters);
+    }
 
-    // Recenter buttons
+    // Sorting Dropdown
+    if (el.sortSelect) {
+      el.sortSelect.addEventListener('change', (e) => {
+        filterState.sortBy = e.target.value;
+        if (el.mobileSortSelect) el.mobileSortSelect.value = e.target.value;
+        applyFilters();
+      });
+    }
+    if (el.mobileSortSelect) {
+      el.mobileSortSelect.addEventListener('change', (e) => {
+        filterState.sortBy = e.target.value;
+        if (el.sortSelect) el.sortSelect.value = e.target.value;
+        applyFilters();
+      });
+    }
+
+    // Recenter map
     const recenterAction = () => {
       if (userCoords && map) {
         map.setView(userCoords, 14, { animate: true });
         if (userMarker) userMarker.openPopup();
       }
     };
-    el.recenterBtn.addEventListener('click', recenterAction);
-    el.mapCenterMeBtn.addEventListener('click', recenterAction);
+    if (el.recenterBtn) el.recenterBtn.addEventListener('click', recenterAction);
+    if (el.mapCenterMeBtn) el.mapCenterMeBtn.addEventListener('click', recenterAction);
 
-    // Change Location Header Button
-    if (el.changeLocationBtn) {
-      el.changeLocationBtn.addEventListener('click', () => {
-        openLocationModal(false);
+    // Fit Bounds
+    if (el.mapFitBoundsBtn) {
+      el.mapFitBoundsBtn.addEventListener('click', () => {
+        if (markerCluster && markerCluster.getLayers().length > 0) {
+          map.fitBounds(markerCluster.getBounds(), { padding: [40, 40], maxZoom: 16 });
+        }
       });
     }
 
-    // Fit map bounds to current markers
-    el.mapFitBoundsBtn.addEventListener('click', () => {
-      if (markerCluster.getLayers().length > 0) {
-        map.fitBounds(markerCluster.getBounds(), { padding: [40, 40], maxZoom: 16 });
-      }
-    });
-
     // Tile Layer Switcher
-    el.toggleTileLayerBtn.addEventListener('click', () => {
-      map.removeLayer(tileLayers[currentTileIndex]);
-      currentTileIndex = (currentTileIndex + 1) % tileLayers.length;
-      map.addLayer(tileLayers[currentTileIndex]);
-      const currentStyle = TILE_STYLES[currentTileIndex];
-      el.toggleTileLayerBtn.title = `Current Style: ${currentStyle.name} (Click to change)`;
-    });
+    if (el.toggleTileLayerBtn) {
+      el.toggleTileLayerBtn.addEventListener('click', () => {
+        if (!map || !tileLayers.length) return;
+        map.removeLayer(tileLayers[currentTileIndex]);
+        currentTileIndex = (currentTileIndex + 1) % tileLayers.length;
+        map.addLayer(tileLayers[currentTileIndex]);
+        const style = TILE_STYLES[currentTileIndex];
+        el.toggleTileLayerBtn.title = `Current Layer: ${style.name} (Click to toggle)`;
+      });
+    }
 
-    // Mobile View Toggle
-    el.mobileShowListBtn.addEventListener('click', () => {
-      el.appContainer.className = 'app-container show-list';
-      el.mobileShowListBtn.classList.add('active');
-      el.mobileShowMapBtn.classList.remove('active');
-    });
+    // Mobile Bottom Sheet Drag & Interaction
+    setupMobileBottomSheetEvents();
 
-    el.mobileShowMapBtn.addEventListener('click', () => {
-      el.appContainer.className = 'app-container show-map';
-      el.mobileShowMapBtn.classList.add('active');
-      el.mobileShowListBtn.classList.remove('active');
-      setTimeout(() => map.invalidateSize(), 200);
-    });
+    // Mobile Floating Pill (View Map / View List)
+    if (el.mobileViewToggleBtn) {
+      el.mobileViewToggleBtn.addEventListener('click', () => {
+        if (mobileSheetState === 'peek') {
+          setMobileSheetState('half');
+        } else {
+          setMobileSheetState('peek');
+        }
+      });
+    }
 
-    // Modal Close
-    el.modalCloseBtn.addEventListener('click', closeModal);
-    el.studioModalBackdrop.addEventListener('click', (e) => {
-      if (e.target === el.studioModalBackdrop) closeModal();
-    });
+    // Mobile Filters Modal Trigger
+    if (el.openMobileFiltersBtn && el.mobileFilterModalBackdrop) {
+      el.openMobileFiltersBtn.addEventListener('click', () => {
+        el.mobileFilterModalBackdrop.classList.add('open');
+      });
+    }
+    if (el.closeMobileFilterModalBtn && el.mobileFilterModalBackdrop) {
+      el.closeMobileFilterModalBtn.addEventListener('click', () => {
+        el.mobileFilterModalBackdrop.classList.remove('open');
+      });
+    }
+    if (el.mobileApplyFiltersBtn && el.mobileFilterModalBackdrop) {
+      el.mobileApplyFiltersBtn.addEventListener('click', () => {
+        el.mobileFilterModalBackdrop.classList.remove('open');
+      });
+    }
+    if (el.mobileResetAllFiltersBtn) {
+      el.mobileResetAllFiltersBtn.addEventListener('click', resetAllFilters);
+    }
+
+    // Close preview card
+    if (el.closePreviewCardBtn) {
+      el.closePreviewCardBtn.addEventListener('click', () => {
+        if (el.mobilePreviewCard) el.mobilePreviewCard.style.display = 'none';
+      });
+    }
+
+    // Studio Detail Modal Close
+    if (el.modalCloseBtn) {
+      el.modalCloseBtn.addEventListener('click', closeModal);
+    }
+    if (el.studioModalBackdrop) {
+      el.studioModalBackdrop.addEventListener('click', (e) => {
+        if (e.target === el.studioModalBackdrop) closeModal();
+      });
+    }
 
     // Copy Address Button
-    el.copyAddressBtn.addEventListener('click', () => {
-      const text = el.modalAddressText.textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        const icon = el.copyAddressBtn.querySelector('i');
-        icon.className = 'fa-solid fa-check text-green-600';
-        setTimeout(() => {
-          icon.className = 'fa-regular fa-copy';
-        }, 1500);
+    if (el.copyAddressBtn && el.modalAddressText) {
+      el.copyAddressBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(el.modalAddressText.textContent).then(() => {
+          const icon = el.copyAddressBtn.querySelector('i');
+          icon.className = 'fa-solid fa-check text-green-600';
+          setTimeout(() => { icon.className = 'fa-regular fa-copy'; }, 1500);
+        });
       });
-    });
+    }
 
-    // Keyboard ESC to close modal
+    // Keyboard ESC to close any modal
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (el.studioModalBackdrop && el.studioModalBackdrop.classList.contains('open')) {
-          closeModal();
-        }
-        if (el.locationModalBackdrop && el.locationModalBackdrop.classList.contains('open')) {
-          closeLocationModal();
+        closeModal();
+        closeLocationModal();
+        if (el.mobileFilterModalBackdrop) el.mobileFilterModalBackdrop.classList.remove('open');
+        cancelManualPinMode();
+      }
+    });
+  }
+
+  function closeAllDropdowns(except) {
+    document.querySelectorAll('.filter-dropdown-wrapper').forEach(w => {
+      if (w !== except) w.classList.remove('open');
+    });
+  }
+
+  function setDistanceFilter(val) {
+    filterState.maxDistance = val;
+    if (val >= 99999) {
+      if (el.distancePillLabel) el.distancePillLabel.textContent = 'All India';
+      if (el.sliderValLabel) el.sliderValLabel.textContent = 'All India';
+      if (el.mobileSliderDistanceVal) el.mobileSliderDistanceVal.textContent = 'All India';
+      if (el.resultsSubtitle) el.resultsSubtitle.textContent = 'Nationwide';
+      if (el.sheetLocationSub) el.sheetLocationSub.textContent = 'Nationwide';
+    } else {
+      if (el.distancePillLabel) el.distancePillLabel.textContent = `< ${val} km`;
+      if (el.sliderValLabel) el.sliderValLabel.textContent = `${val} km`;
+      if (el.mobileSliderDistanceVal) el.mobileSliderDistanceVal.textContent = `${val} km`;
+      if (el.resultsSubtitle) el.resultsSubtitle.textContent = `within ${val} km`;
+      if (el.sheetLocationSub) el.sheetLocationSub.textContent = `Within ${val} km of ${userLocationName.split(',')[0]}`;
+    }
+    if (el.distanceRangeSlider) el.distanceRangeSlider.value = Math.min(50, val);
+
+    if (el.mobileDistancePresets) {
+      el.mobileDistancePresets.querySelectorAll('.dist-btn').forEach(btn => {
+        const d = btn.dataset.distance;
+        const isAct = (d === 'all' && val >= 99999) || (parseFloat(d) === val);
+        btn.classList.toggle('active', isAct);
+      });
+    }
+
+    if (el.distanceMenu) {
+      el.distanceMenu.querySelectorAll('.menu-item').forEach(m => {
+        const d = m.dataset.distance;
+        const isAct = (d === 'all' && val >= 99999) || (parseFloat(d) === val);
+        m.classList.toggle('active', isAct);
+      });
+    }
+
+    applyFilters();
+  }
+
+  /**
+   * Setup Mobile Bottom Sheet States & Drag Gestures
+   */
+  function setupMobileBottomSheetEvents() {
+    if (!el.mobileBottomSheet || !el.sheetDragHandle) return;
+
+    if (el.sheetExpandToggleBtn) {
+      el.sheetExpandToggleBtn.addEventListener('click', () => {
+        if (mobileSheetState === 'peek') setMobileSheetState('half');
+        else if (mobileSheetState === 'half') setMobileSheetState('expanded');
+        else setMobileSheetState('peek');
+      });
+    }
+
+    if (el.sheetHeader) {
+      el.sheetHeader.addEventListener('click', (e) => {
+        if (e.target.closest('select')) return;
+        if (mobileSheetState === 'peek') setMobileSheetState('half');
+      });
+    }
+
+    // Touch Drag Handling
+    let startY = 0;
+    let currentY = 0;
+    let isDragging = false;
+
+    el.sheetDragHandle.addEventListener('touchstart', (e) => {
+      startY = e.touches[0].clientY;
+      isDragging = true;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      currentY = e.touches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      const deltaY = currentY - startY;
+
+      if (Math.abs(deltaY) > 30) {
+        if (deltaY < 0) {
+          // Dragged up
+          if (mobileSheetState === 'peek') setMobileSheetState('half');
+          else if (mobileSheetState === 'half') setMobileSheetState('expanded');
+        } else {
+          // Dragged down
+          if (mobileSheetState === 'expanded') setMobileSheetState('half');
+          else if (mobileSheetState === 'half') setMobileSheetState('peek');
         }
       }
     });
   }
 
+  function setMobileSheetState(state) {
+    mobileSheetState = state;
+    if (!el.mobileBottomSheet) return;
+
+    el.mobileBottomSheet.classList.remove('state-peek', 'state-half', 'state-expanded');
+    el.mobileBottomSheet.classList.add(`state-${state}`);
+
+    if (el.sheetExpandToggleBtn) {
+      const icon = el.sheetExpandToggleBtn.querySelector('i');
+      if (icon) {
+        icon.className = state === 'expanded' ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+      }
+    }
+
+    // Update Floating Switcher Pill
+    if (el.mobileFloatingPill && el.viewToggleLabel && el.viewToggleIcon) {
+      if (state === 'peek') {
+        el.viewToggleLabel.innerHTML = `View List (<span id="mobileCountBadge">${filteredStudios.length}</span>)`;
+        el.viewToggleIcon.className = 'fa-solid fa-list';
+      } else {
+        el.viewToggleLabel.textContent = 'View Map';
+        el.viewToggleIcon.className = 'fa-solid fa-map';
+      }
+    }
+
+    // Hide quick preview card if sheet is expanded
+    if (state === 'expanded' && el.mobilePreviewCard) {
+      el.mobilePreviewCard.style.display = 'none';
+    }
+  }
+
   /**
-   * Reset all filters to default state
+   * Reset All Filters to defaults
    */
   function resetAllFilters() {
     filterState.search = '';
@@ -1190,85 +1375,31 @@
     filterState.selectedTiers.clear();
     filterState.sortBy = 'distance_asc';
 
-    el.searchInput.value = '';
-    el.clearSearchBtn.classList.remove('visible');
-    el.sortSelect.value = 'distance_asc';
-    el.ratingFilterBtn.classList.remove('active');
-    el.verifiedFilterBtn.classList.remove('active');
-    el.openNowFilterBtn.classList.remove('active');
-    el.distanceRangeSlider.value = 5;
-    el.sliderDistanceVal.textContent = '5 km';
+    if (el.searchInput) el.searchInput.value = '';
+    if (el.mobileSearchInput) el.mobileSearchInput.value = '';
+    if (el.clearSearchBtn) el.clearSearchBtn.classList.remove('visible');
+    if (el.clearMobileSearchBtn) el.clearMobileSearchBtn.classList.remove('visible');
 
     if (el.togglePlatformFitpass) el.togglePlatformFitpass.classList.add('active');
     if (el.togglePlatformFitsquare) el.togglePlatformFitsquare.classList.add('active');
 
-    document.querySelectorAll('#distancePresets .dist-pill').forEach(p => {
-      p.classList.toggle('active', p.dataset.distance === '5');
+    if (el.ratingFilterBtn) el.ratingFilterBtn.classList.remove('active');
+    if (el.openNowFilterBtn) el.openNowFilterBtn.classList.remove('active');
+    if (el.verifiedFilterBtn) el.verifiedFilterBtn.classList.remove('active');
+
+    document.querySelectorAll('.chip-item.active').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('#distanceMenu .menu-item').forEach(m => {
+      m.classList.toggle('active', m.dataset.distance === '5');
     });
 
-    document.querySelectorAll('#workoutChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('#amenityChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('#tierChipsContainer .filter-chip').forEach(c => c.classList.remove('active'));
-
-    updateActiveFilterBadge();
-    applyFilters();
+    syncTierPillLabel();
+    syncWorkoutPillLabel();
+    syncAmenityPillLabel();
+    setDistanceFilter(5);
   }
 
   /**
-   * Update Badge count for active filters
-   */
-  function updateActiveFilterBadge() {
-    let count = 0;
-    if (filterState.rating4Plus) count++;
-    if (filterState.verifiedOnly) count++;
-    if (filterState.openNowOnly) count++;
-    count += filterState.selectedWorkouts.size;
-    count += filterState.selectedAmenities.size;
-    if (filterState.selectedPlatforms.size < 2) count++;
-    count += filterState.selectedTiers.size;
-    if (filterState.maxDistance !== 5) count++;
-
-    if (count > 0) {
-      el.activeFilterBadge.textContent = count;
-      el.activeFilterBadge.style.display = 'inline-block';
-      el.resetFiltersBtn.style.display = 'inline-flex';
-    } else {
-      el.activeFilterBadge.style.display = 'none';
-      el.resetFiltersBtn.style.display = 'none';
-    }
-  }
-
-  /**
-   * Check if studio is currently open based on open_time string
-   */
-  function isStudioOpenNow(openTimeStr) {
-    if (!openTimeStr || typeof openTimeStr !== 'string') return true;
-    const parts = openTimeStr.split('-');
-    if (parts.length !== 2) return true;
-
-    try {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-      const [startH, startM] = parts[0].split(':').map(Number);
-      const [endH, endM] = parts[1].split(':').map(Number);
-
-      const startMin = startH * 60 + startM;
-      const endMin = endH * 60 + endM;
-
-      if (startMin <= endMin) {
-        return currentMinutes >= startMin && currentMinutes <= endMin;
-      } else {
-        // Overnight window
-        return currentMinutes >= startMin || currentMinutes <= endMin;
-      }
-    } catch (e) {
-      return true;
-    }
-  }
-
-  /**
-   * Main Filter & Sort Engine
+   * Filter & Sort Engine
    */
   function applyFilters() {
     const query = filterState.search;
@@ -1276,15 +1407,13 @@
     filteredStudios = allStudios.filter(studio => {
       // Platform filter
       const studioPlatforms = studio.platforms || ['fitpass'];
-      const hasSelectedPlatform = studioPlatforms.some(p => filterState.selectedPlatforms.has(p));
-      if (!hasSelectedPlatform) return false;
+      const hasPlatform = studioPlatforms.some(p => filterState.selectedPlatforms.has(p));
+      if (!hasPlatform) return false;
 
-      // FitSquare Membership Tier filter
+      // FitSquare Tier filter
       if (filterState.selectedTiers.size > 0) {
         const tier = studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier;
-        if (!tier || !filterState.selectedTiers.has(tier)) {
-          return false;
-        }
+        if (!tier || !filterState.selectedTiers.has(tier)) return false;
       }
 
       // Distance filter
@@ -1293,13 +1422,13 @@
       // Rating 4.0+
       if (filterState.rating4Plus && (studio.rating || 0) < 4.0) return false;
 
-      // Verified
+      // Verified only
       if (filterState.verifiedOnly && !studio.verified) return false;
 
       // Open now
       if (filterState.openNowOnly && !isStudioOpenNow(studio.open_time)) return false;
 
-      // Text search
+      // Search text
       if (query) {
         const nameMatch = studio.name.toLowerCase().includes(query);
         const localityMatch = (studio.locality || '').toLowerCase().includes(query);
@@ -1308,31 +1437,28 @@
         if (!nameMatch && !localityMatch && !addressMatch && !workoutMatch) return false;
       }
 
-      // Selected Workouts (Must offer at least one selected workout)
+      // Selected Workouts (Match at least one)
       if (filterState.selectedWorkouts.size > 0) {
-        const studioWorkouts = new Set(studio.workouts || []);
-        let hasMatch = false;
+        const setW = new Set(studio.workouts || []);
+        let match = false;
         for (const w of filterState.selectedWorkouts) {
-          if (studioWorkouts.has(w)) {
-            hasMatch = true;
-            break;
-          }
+          if (setW.has(w)) { match = true; break; }
         }
-        if (!hasMatch) return false;
+        if (!match) return false;
       }
 
-      // Selected Amenities (Must offer ALL selected amenities)
+      // Selected Amenities (Must have ALL selected)
       if (filterState.selectedAmenities.size > 0) {
-        const studioAmenities = new Set(studio.amenities || []);
+        const setA = new Set(studio.amenities || []);
         for (const a of filterState.selectedAmenities) {
-          if (!studioAmenities.has(a)) return false;
+          if (!setA.has(a)) return false;
         }
       }
 
       return true;
     });
 
-    // Sorting
+    // Sort Results
     filteredStudios.sort((a, b) => {
       switch (filterState.sortBy) {
         case 'distance_asc':
@@ -1348,21 +1474,73 @@
       }
     });
 
-    // Update Counter Badges
+    // Update Counts
     const totalCount = filteredStudios.length;
-    el.resultsCountLabel.textContent = `Showing ${totalCount.toLocaleString()} gym${totalCount === 1 ? '' : 's'}`;
-    el.headerCounterBadge.textContent = `${totalCount.toLocaleString()} Gyms Nearby`;
-    el.mobileCount.textContent = totalCount.toLocaleString();
+    if (el.resultsCountLabel) el.resultsCountLabel.textContent = `Showing ${totalCount.toLocaleString()} gym${totalCount === 1 ? '' : 's'}`;
+    if (el.headerGymCountText) el.headerGymCountText.textContent = `${totalCount.toLocaleString()} Gyms Nearby`;
+    if (el.sheetGymCount) el.sheetGymCount.textContent = `${totalCount.toLocaleString()} Gyms Nearby`;
+    if (el.mobileCountBadge) el.mobileCountBadge.textContent = totalCount.toLocaleString();
+
+    // Update Filter Active Badge
+    updateFilterBadgeCount();
 
     // Render Markers & Cards
     renderMapMarkers();
     renderCardsList();
   }
 
+  function updateFilterBadgeCount() {
+    let count = 0;
+    if (filterState.rating4Plus) count++;
+    if (filterState.verifiedOnly) count++;
+    if (filterState.openNowOnly) count++;
+    count += filterState.selectedWorkouts.size;
+    count += filterState.selectedAmenities.size;
+    if (filterState.selectedPlatforms.size < 2) count++;
+    count += filterState.selectedTiers.size;
+    if (filterState.maxDistance !== 5) count++;
+
+    if (el.mobileFilterBadge) {
+      if (count > 0) {
+        el.mobileFilterBadge.textContent = count;
+        el.mobileFilterBadge.style.display = 'flex';
+      } else {
+        el.mobileFilterBadge.style.display = 'none';
+      }
+    }
+
+    if (el.resetFiltersBtn) {
+      el.resetFiltersBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+  }
+
+  function isStudioOpenNow(openTimeStr) {
+    if (!openTimeStr || typeof openTimeStr !== 'string') return true;
+    const parts = openTimeStr.split('-');
+    if (parts.length !== 2) return true;
+    try {
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const [startH, startM] = parts[0].split(':').map(Number);
+      const [endH, endM] = parts[1].split(':').map(Number);
+      const startMin = startH * 60 + startM;
+      const endMin = endH * 60 + endM;
+
+      if (startMin <= endMin) {
+        return currentMinutes >= startMin && currentMinutes <= endMin;
+      } else {
+        return currentMinutes >= startMin || currentMinutes <= endMin;
+      }
+    } catch (e) {
+      return true;
+    }
+  }
+
   /**
-   * Render Map Markers with Leaflet MarkerCluster
+   * Render Map Markers with Custom Pins
    */
   function renderMapMarkers() {
+    if (!markerCluster) return;
     markerCluster.clearLayers();
     studioMarkersMap.clear();
 
@@ -1372,13 +1550,10 @@
       const platforms = studio.platforms || ['fitpass'];
       const isMultiPass = platforms.length > 1;
       const isFitSquareOnly = platforms.length === 1 && platforms[0] === 'fitsquare';
-      
+
       let pinClass = 'pin-fitpass';
-      if (isMultiPass) {
-        pinClass = 'pin-multipass';
-      } else if (isFitSquareOnly) {
-        pinClass = 'pin-fitsquare';
-      }
+      if (isMultiPass) pinClass = 'pin-multipass';
+      else if (isFitSquareOnly) pinClass = 'pin-fitsquare';
 
       const gymIcon = L.divIcon({
         className: 'gym-marker-icon',
@@ -1389,11 +1564,10 @@
       });
 
       const marker = L.marker([studio.lat, studio.lng], { icon: gymIcon });
-
       const isOpen = isStudioOpenNow(studio.open_time);
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
 
-      // Platform Badges for Popup
+      // Platform Badges Html
       const platformBadgesHtml = platforms.map(p => {
         if (p === 'fitpass') return '<span class="platform-tag pt-fitpass">FitPass</span>';
         if (p === 'fitsquare') {
@@ -1403,10 +1577,10 @@
         return `<span class="platform-tag">${escapeHtml(p)}</span>`;
       }).join(' ');
 
-      // Custom rich popup
+      // Desktop Popup HTML
       const popupHtml = `
         <div class="popup-card">
-          <div class="popup-img-wrapper">
+          <div class="popup-img-wrap">
             <img class="popup-img" src="${studio.image || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'}" alt="${escapeHtml(studio.name)}" loading="lazy" onerror="this.src='https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'">
             ${studio.logo ? `<img class="popup-logo" src="${studio.logo}" alt="Logo" onerror="this.style.display='none'">` : ''}
           </div>
@@ -1415,37 +1589,30 @@
               ${platformBadgesHtml}
             </div>
             <h3 class="popup-name">${escapeHtml(studio.name)}</h3>
-            <div class="popup-locality">
+            <div class="popup-location-line">
               <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i>
-              ${escapeHtml(studio.locality || studio.city)} • <strong style="color: var(--primary);">${studio.distance} km</strong>
+              <span>${escapeHtml(studio.locality || studio.city)} • <strong style="color: var(--primary);">${studio.distance} km</strong></span>
             </div>
-
-            <div class="popup-stats">
-              <div class="rating-badge">
+            <div class="popup-stats-line">
+              <div class="card-rating">
                 <i class="fa-solid fa-star"></i>
                 <span>${ratingStars}</span>
-                <span style="opacity: 0.7; font-weight: 500;">(${studio.rating_count})</span>
+                <span style="opacity: 0.7;">(${studio.rating_count})</span>
               </div>
-              <div style="font-size: 11px; font-weight: 600; color: ${isOpen ? '#10B981' : '#EF4444'};">
-                <i class="fa-solid fa-circle" style="font-size: 7px; vertical-align: middle;"></i> ${isOpen ? 'Open Now' : 'Closed'}
+              <div class="card-open-status ${isOpen ? 'status-open' : 'status-closed'}">
+                ● ${isOpen ? 'Open Now' : 'Closed'}
               </div>
             </div>
-
-            <div class="popup-workouts">
-              ${(studio.workouts || []).slice(0, 3).map(w => `<span class="workout-tag">${escapeHtml(w)}</span>`).join('')}
-            </div>
-
             ${(studio.amenities && studio.amenities.length > 0) ? `
-              <div class="popup-amenities">
-                ${studio.amenities.slice(0, 5).map(a => {
+              <div class="popup-amenities-row">
+                ${studio.amenities.slice(0, 4).map(a => {
                   const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
-                  return `<span class="popup-amenity-badge" title="${escapeHtml(a)}"><i class="${icon}"></i> <span>${escapeHtml(a)}</span></span>`;
+                  return `<span class="popup-amenity-chip"><i class="${icon}"></i> <span>${escapeHtml(a)}</span></span>`;
                 }).join('')}
-                ${studio.amenities.length > 5 ? `<span class="popup-amenity-badge popup-amenity-more">+${studio.amenities.length - 5}</span>` : ''}
+                ${studio.amenities.length > 4 ? `<span class="popup-amenity-chip">+${studio.amenities.length - 4}</span>` : ''}
               </div>
             ` : ''}
-
-            <button class="popup-btn" onclick="window.viewStudioDetails('${studio.id}')">
+            <button class="popup-btn-detail" onclick="window.viewStudioDetails('${studio.id}')">
               <i class="fa-solid fa-circle-info"></i> View Full Details
             </button>
           </div>
@@ -1455,7 +1622,13 @@
       marker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 280 });
 
       marker.on('click', () => {
-        highlightCard(studio.id);
+        // Highlight in list
+        highlightStudioCard(studio.id);
+
+        // On mobile, show docked preview card
+        if (window.innerWidth <= 960) {
+          showMobilePreviewCard(studio);
+        }
       });
 
       studioMarkersMap.set(String(studio.id), marker);
@@ -1466,107 +1639,164 @@
   }
 
   /**
-   * Render Studio Cards in Sidebar (Paginated/Chunked for high performance)
+   * Show Mobile Bottom Preview Card when a Pin is clicked
+   */
+  function showMobilePreviewCard(studio) {
+    if (!el.mobilePreviewCard || !el.previewCardContent) return;
+
+    const platforms = studio.platforms || ['fitpass'];
+    const isOpen = isStudioOpenNow(studio.open_time);
+    const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
+
+    const platformBadgesHtml = platforms.map(p => {
+      if (p === 'fitpass') return '<span class="platform-tag pt-fitpass">FitPass</span>';
+      if (p === 'fitsquare') {
+        const tier = (studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier) || '';
+        return `<span class="platform-tag pt-fitsquare-${tier.toLowerCase()}">FitSquare ${escapeHtml(tier)}</span>`;
+      }
+      return `<span class="platform-tag">${escapeHtml(p)}</span>`;
+    }).join(' ');
+
+    const directionsUrl = userCoords
+      ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
+
+    el.previewCardContent.innerHTML = `
+      <div class="preview-top-row">
+        <img class="preview-thumb" src="${studio.image || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'}" alt="${escapeHtml(studio.name)}" onerror="this.src='https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'">
+        <div class="preview-info">
+          <div style="display: flex; gap: 4px; margin-bottom: 2px;">${platformBadgesHtml}</div>
+          <div class="preview-name">${escapeHtml(studio.name)}</div>
+          <div class="preview-meta">
+            <strong style="color: var(--primary);">${studio.distance} km</strong> • ${escapeHtml(studio.locality || studio.city)}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px;">
+            <span class="card-rating"><i class="fa-solid fa-star"></i> ${ratingStars} (${studio.rating_count})</span>
+            <span class="card-open-status ${isOpen ? 'status-open' : 'status-closed'}">● ${isOpen ? 'Open Now' : 'Closed'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="preview-bottom-actions">
+        <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="btn-preview-nav btn-nav-primary">
+          <i class="fa-solid fa-diamond-turn-right"></i> Directions
+        </a>
+        <button type="button" class="btn-preview-nav btn-nav-details" onclick="window.viewStudioDetails('${studio.id}')">
+          <i class="fa-solid fa-circle-info"></i> Details
+        </button>
+      </div>
+    `;
+
+    el.mobilePreviewCard.style.display = 'block';
+    setMobileSheetState('peek');
+  }
+
+  /**
+   * Render Studio Cards (Desktop Sidebar & Mobile Sheet)
    */
   function renderCardsList() {
+    if (!el.studiosList) return;
     el.studiosList.innerHTML = '';
+    if (el.mobileCardsList) el.mobileCardsList.innerHTML = '';
 
     if (filteredStudios.length === 0) {
-      el.studiosList.innerHTML = `
+      const emptyHtml = `
         <div class="empty-state">
-          <i class="fa-solid fa-dumbbell"></i>
+          <div class="empty-state-icon"><i class="fa-solid fa-dumbbell"></i></div>
           <h3>No Gyms Found</h3>
-          <p>No gyms match your current filter criteria. Try expanding the distance or clearing filters.</p>
-          <button class="filter-btn active" onclick="window.resetFiltersTrigger()">Reset Filters</button>
+          <p>No gyms match your current filter settings. Try expanding your search radius or clearing active filters.</p>
+          <button type="button" class="btn-empty-reset" onclick="window.resetFiltersTrigger()">Reset Filters</button>
         </div>
       `;
+      el.studiosList.innerHTML = emptyHtml;
+      if (el.mobileCardsList) el.mobileCardsList.innerHTML = emptyHtml;
       return;
     }
 
-    // Render first 40 cards, then append more on scroll
-    const initialBatch = filteredStudios.slice(0, 40);
-    appendCards(initialBatch);
+    const initialBatch = filteredStudios.slice(0, 35);
+    appendCardsToContainer(initialBatch, el.studiosList, false);
+    if (el.mobileCardsList) appendCardsToContainer(initialBatch, el.mobileCardsList, true);
 
     let renderedCount = initialBatch.length;
-    el.studiosList.onscroll = () => {
+    const handleScroll = (container) => {
       if (renderedCount >= filteredStudios.length) return;
-      const { scrollTop, scrollHeight, clientHeight } = el.studiosList;
-      if (scrollTop + clientHeight >= scrollHeight - 300) {
-        const nextBatch = filteredStudios.slice(renderedCount, renderedCount + 30);
-        appendCards(nextBatch);
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollTop + clientHeight >= scrollHeight - 350) {
+        const nextBatch = filteredStudios.slice(renderedCount, renderedCount + 25);
+        appendCardsToContainer(nextBatch, el.studiosList, false);
+        if (el.mobileCardsList) appendCardsToContainer(nextBatch, el.mobileCardsList, true);
         renderedCount += nextBatch.length;
       }
     };
+
+    el.studiosList.onscroll = () => handleScroll(el.studiosList);
+    const sheetBody = document.getElementById('sheetBody');
+    if (sheetBody) sheetBody.onscroll = () => handleScroll(sheetBody);
   }
 
-  function appendCards(studios) {
+  function appendCardsToContainer(studios, container, isMobile = false) {
+    if (!container) return;
+
     studios.forEach(studio => {
       const card = document.createElement('div');
       card.className = 'studio-card';
-      card.id = `studio-card-${studio.id}`;
+      card.id = `${isMobile ? 'm-' : ''}studio-card-${studio.id}`;
 
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
       const isOpen = isStudioOpenNow(studio.open_time);
       const platforms = studio.platforms || ['fitpass'];
 
-      // Workouts preview
-      const workoutsHtml = (studio.workouts || []).slice(0, 3).map(w =>
-        `<span class="workout-tag">${escapeHtml(w)}</span>`
-      ).join('');
-      const moreWorkouts = (studio.workouts || []).length > 3 ? `<span class="workout-tag">+${studio.workouts.length - 3}</span>` : '';
-
-      // Amenities icons preview
-      const amenitiesHtml = (studio.amenities || []).slice(0, 4).map(a => {
-        const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
-        return `<span class="amenity-icon-item" title="${escapeHtml(a)}"><i class="${icon}"></i></span>`;
+      // Platform Badges
+      const cardPlatformsHtml = platforms.map(p => {
+        if (p === 'fitpass') return '<span class="platform-tag pt-fitpass"><i class="fa-solid fa-check"></i> FitPass</span>';
+        if (p === 'fitsquare') {
+          const tier = (studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier) || 'Pass';
+          return `<span class="platform-tag pt-fitsquare-${tier.toLowerCase()}"><i class="fa-solid fa-cube"></i> FitSquare: ${escapeHtml(tier)}</span>`;
+        }
+        return `<span class="platform-tag">${escapeHtml(p)}</span>`;
       }).join('');
 
-      // Platform Badges Preview on Card
-      const cardPlatformBadgesHtml = `
-        <div class="card-platform-badges">
-          ${platforms.map(p => {
-            if (p === 'fitpass') return '<span class="platform-tag pt-fitpass"><i class="fa-solid fa-check"></i> FitPass</span>';
-            if (p === 'fitsquare') {
-              const tier = (studio.platform_details && studio.platform_details.fitsquare && studio.platform_details.fitsquare.tier) || 'Pass';
-              return `<span class="platform-tag pt-fitsquare-${tier.toLowerCase()}"><i class="fa-solid fa-cube"></i> FitSquare: ${escapeHtml(tier)}</span>`;
-            }
-            return `<span class="platform-tag">${escapeHtml(p)}</span>`;
-          }).join('')}
-        </div>
-      `;
+      // Amenity Icons Preview
+      const amenitiesHtml = (studio.amenities || []).slice(0, 4).map(a => {
+        const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
+        return `<span class="card-amenity-icon" title="${escapeHtml(a)}"><i class="${icon}"></i></span>`;
+      }).join('');
+
+      const directionsUrl = userCoords
+        ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}`
+        : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
 
       card.innerHTML = `
-        <div class="studio-thumb-wrapper">
-          <img class="studio-thumb" src="${studio.image || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'}" alt="${escapeHtml(studio.name)}" loading="lazy" onerror="this.src='https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'">
-          ${studio.logo ? `<img class="studio-logo-overlay" src="${studio.logo}" alt="Logo" onerror="this.style.display='none'">` : ''}
+        <div class="card-thumb-wrap">
+          <img class="card-thumb" src="${studio.image || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'}" alt="${escapeHtml(studio.name)}" loading="lazy" onerror="this.src='https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg'">
+          ${studio.logo ? `<img class="card-logo-badge" src="${studio.logo}" alt="Logo" onerror="this.style.display='none'">` : ''}
         </div>
-        <div class="studio-info">
+        <div class="card-content">
           <div>
-            <div class="studio-title-row">
-              <h3 class="studio-name" title="${escapeHtml(studio.name)}">${escapeHtml(studio.name)}</h3>
-              ${studio.verified ? '<i class="fa-solid fa-certificate verified-icon" title="Verified Partner"></i>' : ''}
+            <div class="card-title-row">
+              <h3 class="card-name" title="${escapeHtml(studio.name)}">${escapeHtml(studio.name)}</h3>
+              ${studio.verified ? '<i class="fa-solid fa-certificate verified-icon" title="Verified Gym"></i>' : ''}
             </div>
-            ${cardPlatformBadgesHtml}
-            <div class="studio-meta-row" style="margin-top: 4px;">
-              <span class="meta-distance">${studio.distance} km away</span>
+            <div class="card-platforms">${cardPlatformsHtml}</div>
+            <div class="card-meta-line">
+              <span class="card-distance">${studio.distance} km</span>
               <span>•</span>
-              <span class="truncate">${escapeHtml(studio.locality || studio.city)}</span>
+              <span class="card-locality">${escapeHtml(studio.locality || studio.city)}</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
-              <span class="rating-badge">
-                <i class="fa-solid fa-star"></i>
-                ${ratingStars}
-              </span>
-              <span class="rating-reviews">(${studio.rating_count} reviews)</span>
-              <span style="font-size: 11px; font-weight: 600; margin-left: auto; color: ${isOpen ? '#10B981' : '#94A3B8'};">
-                ${isOpen ? 'Open' : 'Closed'}
-              </span>
+            <div class="card-stats-line">
+              <span class="card-rating"><i class="fa-solid fa-star"></i> ${ratingStars}</span>
+              <span class="card-review-count">(${studio.rating_count})</span>
+              <span class="card-open-status ${isOpen ? 'status-open' : 'status-closed'}">● ${isOpen ? 'Open' : 'Closed'}</span>
             </div>
           </div>
-          <div class="studio-workouts-preview">
-            ${workoutsHtml}${moreWorkouts}
+          ${amenitiesHtml ? `<div class="card-amenities-row">${amenitiesHtml}</div>` : ''}
+          <div class="card-actions-row">
+            <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer" class="btn-card-action btn-card-directions" onclick="event.stopPropagation()">
+              <i class="fa-solid fa-diamond-turn-right"></i> Directions
+            </a>
+            <button type="button" class="btn-card-action btn-card-details" onclick="event.stopPropagation(); window.viewStudioDetails('${studio.id}')">
+              <i class="fa-solid fa-circle-info"></i> Details
+            </button>
           </div>
-          ${amenitiesHtml ? `<div class="amenities-preview">${amenitiesHtml}</div>` : ''}
         </div>
       `;
 
@@ -1574,78 +1804,63 @@
         focusStudioOnMap(studio);
       });
 
-      card.addEventListener('dblclick', () => {
-        openModal(studio);
-      });
-
-      el.studiosList.appendChild(card);
+      container.appendChild(card);
     });
   }
 
-  /**
-   * Focus studio marker on map and pan to it
-   */
   function focusStudioOnMap(studio) {
-    highlightCard(studio.id);
+    highlightStudioCard(studio.id);
 
-    const marker = studioMarkersMap.get(studio.id);
-    if (marker) {
+    const marker = studioMarkersMap.get(String(studio.id));
+    if (marker && markerCluster && map) {
       markerCluster.zoomToShowLayer(marker, () => {
         map.setView([studio.lat, studio.lng], Math.max(map.getZoom(), 15), { animate: true });
         marker.openPopup();
       });
     }
 
-    // On mobile switch to map view
-    if (window.innerWidth <= 900) {
-      el.appContainer.className = 'app-container show-map';
-      el.mobileShowMapBtn.classList.add('active');
-      el.mobileShowListBtn.classList.remove('active');
-      setTimeout(() => map.invalidateSize(), 200);
+    if (window.innerWidth <= 960) {
+      showMobilePreviewCard(studio);
     }
   }
 
-  /**
-   * Highlight Card in Sidebar
-   */
-  function highlightCard(studioId) {
+  function highlightStudioCard(studioId) {
     document.querySelectorAll('.studio-card.active').forEach(c => c.classList.remove('active'));
-    const card = document.getElementById(`studio-card-${studioId}`);
-    if (card) {
-      card.classList.add('active');
-      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const desktopCard = document.getElementById(`studio-card-${studioId}`);
+    if (desktopCard) {
+      desktopCard.classList.add('active');
+      desktopCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    const mobileCard = document.getElementById(`m-studio-card-${studioId}`);
+    if (mobileCard) {
+      mobileCard.classList.add('active');
+      mobileCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 
   /**
-   * Open Studio Details Modal
+   * Studio Details Full Modal / Slide-Over Sheet
    */
   function openModal(studio) {
     activeStudio = studio;
 
-    // Header image & Logo
     el.modalBannerImg.src = studio.image || (studio.gallery && studio.gallery[0]) || 'https://cdn.fitimg.in/studio-profile-6CC82C76E06C6C.jpeg';
     el.modalLogoImg.src = studio.logo || 'https://cdn.fitimg.in/studio_logo_63AA4A977C3235.png';
     el.modalStudioName.textContent = studio.name;
     el.modalAddressText.textContent = studio.address || `${studio.locality}, ${studio.city}`;
 
-    // Badges Row
     const isOpen = isStudioOpenNow(studio.open_time);
     el.modalBadgesRow.innerHTML = `
-      <span class="stats-pill" style="background: var(--primary-light); color: var(--primary); border-color: #FECDD3;">
-        <i class="fa-solid fa-location-dot"></i> ${studio.distance} km away (${escapeHtml(userLocationName.split(',')[0])})
+      <span class="detail-pill" style="background: var(--primary-light); color: var(--primary);">
+        <i class="fa-solid fa-location-dot"></i> ${studio.distance} km away
       </span>
-      <span class="rating-badge" style="padding: 4px 10px; font-size: 12px;">
-        <i class="fa-solid fa-star"></i> ${studio.rating ? studio.rating.toFixed(1) : 'New'} (${studio.rating_count} ratings)
+      <span class="detail-pill" style="background: #FEF3C7; color: #B45309;">
+        <i class="fa-solid fa-star"></i> ${studio.rating ? studio.rating.toFixed(1) : 'New'} (${studio.rating_count} reviews)
       </span>
-      <span class="stats-pill" style="background: ${isOpen ? '#ECFDF5' : '#F1F5F9'}; color: ${isOpen ? '#059669' : '#64748B'}; border-color: ${isOpen ? '#A7F3D0' : '#E2E8F0'};">
-        <i class="fa-solid fa-clock"></i> ${isOpen ? 'Currently Open' : 'Closed Now'} (${studio.open_time})
+      <span class="detail-pill" style="background: ${isOpen ? '#ECFDF5' : '#F1F5F9'}; color: ${isOpen ? '#059669' : '#64748B'};">
+        <i class="fa-solid fa-clock"></i> ${isOpen ? 'Open Now' : 'Closed'} (${studio.open_time})
       </span>
-      ${studio.verified ? `
-        <span class="stats-pill" style="background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE;">
-          <i class="fa-solid fa-shield-halved"></i> FitPass Verified
-        </span>
-      ` : ''}
+      ${studio.verified ? '<span class="detail-pill" style="background: #EFF6FF; color: #1D4ED8;"><i class="fa-solid fa-shield-halved"></i> Verified</span>' : ''}
     `;
 
     // Supported Platforms & Access Cards
@@ -1662,25 +1877,21 @@
             rating_count: studio.rating_count,
             url: studio.url || `https://fitpass.co.in/studio/${studio.id}`
           };
-          const fpRating = fp.rating ? fp.rating.toFixed(1) : 'New';
           const card = document.createElement('div');
-          card.className = 'platform-access-card card-fitpass';
+          card.className = 'pac-card card-fitpass';
           card.innerHTML = `
-            <div class="pac-header">
-              <span class="pac-brand-badge" style="color: #0284C7;"><i class="fa-solid fa-ticket"></i> FITPASS</span>
+            <div class="pac-card-header">
+              <span class="pac-brand" style="color: #0284C7;"><i class="fa-solid fa-ticket"></i> FITPASS</span>
               <span class="platform-tag pt-fitpass">All-Access Pass</span>
             </div>
             <div class="pac-body">
-              <div class="pac-title">${escapeHtml(fp.name || studio.name)}</div>
-              <div class="pac-detail"><i class="fa-solid fa-star text-amber-500"></i> <strong>${fpRating}</strong> (${fp.rating_count || 0} reviews)</div>
-              <div class="pac-detail"><i class="fa-solid fa-circle-check text-green-600"></i> Included in all FITPASS subscriptions</div>
-              ${fp.address ? `<div class="pac-detail" style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(fp.address)}</div>` : ''}
+              <div><strong>${escapeHtml(fp.name || studio.name)}</strong></div>
+              <div><i class="fa-solid fa-star text-amber-500"></i> ${fp.rating ? fp.rating.toFixed(1) : 'New'} (${fp.rating_count || 0} reviews)</div>
+              <div style="color: #059669;"><i class="fa-solid fa-circle-check"></i> Included in all FitPass memberships</div>
             </div>
-            <div class="pac-footer-action">
-              <a href="${fp.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitpass">
-                <span>View on FitPass</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              </a>
-            </div>
+            <a href="${fp.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitpass">
+              <span>View on FitPass</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
           `;
           el.modalPlatformCardsGrid.appendChild(card);
         } else if (p === 'fitsquare') {
@@ -1691,28 +1902,23 @@
             rating_count: studio.rating_count,
             url: `https://fitsquare.in/gym/${studio.id}`
           };
-          const fsRating = fs.rating ? fs.rating.toFixed(1) : 'New';
           const tier = fs.tier || 'Standard';
           const card = document.createElement('div');
-          card.className = 'platform-access-card card-fitsquare';
-
+          card.className = 'pac-card card-fitsquare';
           card.innerHTML = `
-            <div class="pac-header">
-              <span class="pac-brand-badge" style="color: #F97316;"><i class="fa-solid fa-cube"></i> FITSQUARE</span>
+            <div class="pac-card-header">
+              <span class="pac-brand" style="color: #EA580C;"><i class="fa-solid fa-cube"></i> FITSQUARE</span>
               <span class="platform-tag pt-fitsquare-${tier.toLowerCase()}">${escapeHtml(tier)} Tier</span>
             </div>
             <div class="pac-body">
-              <div class="pac-title">${escapeHtml(fs.name || studio.name)}</div>
-              <div class="pac-detail"><i class="fa-solid fa-star text-amber-500"></i> <strong>${fsRating}</strong> (${fs.rating_count || 0} reviews)</div>
-              <div class="pac-detail"><i class="fa-solid fa-tag text-orange-600"></i> Lifetime valid session pack access</div>
-              ${fs.telephone ? `<div class="pac-detail"><i class="fa-solid fa-phone text-blue-600"></i> ${escapeHtml(fs.telephone)}</div>` : ''}
-              ${fs.address ? `<div class="pac-detail" style="font-size: 11px; color: var(--text-muted);"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(fs.address)}</div>` : ''}
+              <div><strong>${escapeHtml(fs.name || studio.name)}</strong></div>
+              <div><i class="fa-solid fa-star text-amber-500"></i> ${fs.rating ? fs.rating.toFixed(1) : 'New'} (${fs.rating_count || 0} reviews)</div>
+              ${fs.telephone ? `<div><i class="fa-solid fa-phone text-blue-600"></i> ${escapeHtml(fs.telephone)}</div>` : ''}
+              <div style="color: #EA580C;"><i class="fa-solid fa-tag"></i> Lifetime valid session pack access</div>
             </div>
-            <div class="pac-footer-action">
-              <a href="${fs.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitsquare">
-                <span>View on FitSquare</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
-              </a>
-            </div>
+            <a href="${fs.url}" target="_blank" rel="noopener noreferrer" class="pac-btn pac-btn-fitsquare">
+              <span>View on FitSquare</span> <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </a>
           `;
           el.modalPlatformCardsGrid.appendChild(card);
         }
@@ -1721,11 +1927,11 @@
 
     // Amenities Grid
     if (studio.amenities && studio.amenities.length > 0) {
-      el.modalAmenitiesSection.style.display = 'block';
+      el.modalAmenitiesSection.style.display = 'flex';
       el.modalAmenitiesGrid.innerHTML = studio.amenities.map(a => {
         const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
         return `
-          <div class="amenity-card">
+          <div class="amenity-cell">
             <i class="${icon}"></i>
             <span>${escapeHtml(a)}</span>
           </div>
@@ -1735,95 +1941,64 @@
       el.modalAmenitiesSection.style.display = 'none';
     }
 
-    // Workouts List
-    el.modalWorkoutsList.innerHTML = (studio.workouts || []).map(w =>
-      `<span class="filter-chip active">${escapeHtml(w)}</span>`
-    ).join('');
+    // Workouts
+    if (studio.workouts && studio.workouts.length > 0) {
+      el.modalWorkoutsSection.style.display = 'flex';
+      el.modalWorkoutsList.innerHTML = studio.workouts.map(w =>
+        `<span class="workout-badge">${escapeHtml(w)}</span>`
+      ).join('');
+    } else {
+      el.modalWorkoutsSection.style.display = 'none';
+    }
 
-    // About Studio
+    // About Section
     if (studio.about) {
-      el.modalAboutSection.style.display = 'block';
+      el.modalAboutSection.style.display = 'flex';
       el.modalAboutText.textContent = studio.about;
     } else {
       el.modalAboutSection.style.display = 'none';
     }
 
-    // Photo Gallery with Platform Attribution
-    if (studio.gallery_detailed && studio.gallery_detailed.length > 0) {
-      el.modalGallerySection.style.display = 'block';
-      el.modalGalleryGrid.innerHTML = studio.gallery_detailed.map(item => `
-        <div class="gallery-thumb-container">
-          <span class="gallery-platform-pill">${item.platform === 'fitsquare' ? 'FitSquare' : 'FitPass'}</span>
-          <img class="gallery-thumb" src="${item.url}" alt="Gallery" loading="lazy" onclick="window.setModalBanner('${item.url}')">
-        </div>
+    // Gallery
+    const galleryItems = (studio.gallery_detailed && studio.gallery_detailed.length > 0)
+      ? studio.gallery_detailed.map(g => g.url)
+      : (studio.gallery && studio.gallery.length > 0 ? studio.gallery : (studio.image ? [studio.image] : []));
+
+    if (galleryItems.length > 0) {
+      el.modalGallerySection.style.display = 'flex';
+      el.modalGalleryGrid.innerHTML = galleryItems.map(url => `
+        <img class="gallery-photo-thumb" src="${url}" alt="Gallery" loading="lazy" onclick="window.setModalHeroPhoto('${url}')">
       `).join('');
     } else {
-      const galleryImages = (studio.gallery && studio.gallery.length > 0) ? studio.gallery : (studio.image ? [studio.image] : []);
-      if (galleryImages.length > 0) {
-        el.modalGallerySection.style.display = 'block';
-        el.modalGalleryGrid.innerHTML = galleryImages.map(img => `
-          <img class="gallery-thumb" src="${img}" alt="Gallery" loading="lazy" onclick="window.setModalBanner('${img}')">
-        `).join('');
-      } else {
-        el.modalGallerySection.style.display = 'none';
-      }
+      el.modalGallerySection.style.display = 'none';
     }
 
-    // Reviews List
+    // Reviews
     if (studio.reviews && studio.reviews.length > 0) {
-      el.modalReviewsSection.style.display = 'block';
-      el.modalReviewsList.innerHTML = studio.reviews.map(rev => `
-        <div class="review-item">
-          <div class="review-header">
-            <span class="review-author">${escapeHtml(rev.user_name || 'FitPass Member')}</span>
-            <span class="rating-badge"><i class="fa-solid fa-star"></i> ${rev.star || 5}</span>
+      el.modalReviewsSection.style.display = 'flex';
+      el.modalReviewsList.innerHTML = studio.reviews.map(r => `
+        <div class="review-item-card">
+          <div class="review-meta">
+            <span>${escapeHtml(r.user_name || 'Fitness Member')}</span>
+            <span class="card-rating"><i class="fa-solid fa-star"></i> ${r.star || 5}</span>
           </div>
-          <p class="review-text">${escapeHtml(rev.message || 'Great facility and trainers.')}</p>
+          <p class="review-text">${escapeHtml(r.message || 'Great fitness center.')}</p>
         </div>
       `).join('');
     } else {
       el.modalReviewsSection.style.display = 'none';
     }
 
-    // Dynamic Platform Direct Action Links
-    if (el.modalPlatformButtonsContainer) {
-      el.modalPlatformButtonsContainer.innerHTML = '';
-      const platforms = studio.platforms || ['fitpass'];
-      const pDetails = studio.platform_details || {};
+    // Directions Link
+    el.modalGoogleMapsLink.href = userCoords
+      ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
 
-      if (platforms.includes('fitpass')) {
-        const fpUrl = (pDetails.fitpass && pDetails.fitpass.url) || studio.url || `https://fitpass.co.in/studio/${studio.id}`;
-        const fpBtn = document.createElement('a');
-        fpBtn.href = fpUrl;
-        fpBtn.target = '_blank';
-        fpBtn.rel = 'noopener noreferrer';
-        fpBtn.className = 'btn-primary';
-        fpBtn.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i><span>View on FITPASS</span>';
-        el.modalPlatformButtonsContainer.appendChild(fpBtn);
-      }
-
-      if (platforms.includes('fitsquare')) {
-        const fsUrl = (pDetails.fitsquare && pDetails.fitsquare.url) || `https://fitsquare.in/gym/${studio.id}`;
-        const fsBtn = document.createElement('a');
-        fsBtn.href = fsUrl;
-        fsBtn.target = '_blank';
-        fsBtn.rel = 'noopener noreferrer';
-        fsBtn.className = 'btn-primary';
-        fsBtn.style.background = 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)';
-        fsBtn.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i><span>View on FITSQUARE</span>';
-        el.modalPlatformButtonsContainer.appendChild(fsBtn);
-      }
-    }
-
-    // Google Maps Direction Link
-    el.modalGoogleMapsLink.href = userCoords ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${studio.lat},${studio.lng}` : `https://www.google.com/maps/dir/?api=1&destination=${studio.lat},${studio.lng}`;
-
-    // Open Modal
     el.studioModalBackdrop.classList.add('open');
   }
 
   function closeModal() {
-    el.studioModalBackdrop.classList.remove('open');
+    if (el.studioModalBackdrop) el.studioModalBackdrop.classList.remove('open');
   }
 
   // Utilities
@@ -1837,19 +2012,18 @@
       .replace(/'/g, '&#039;');
   }
 
-  // Global triggers
+  // Global window handlers
   window.viewStudioDetails = function (id) {
-    const studio = allStudios.find(s => String(s.id) === String(id));
-    if (studio) openModal(studio);
+    const s = allStudios.find(item => String(item.id) === String(id));
+    if (s) openModal(s);
   };
 
-  window.setModalBanner = function (src) {
-    el.modalBannerImg.src = src;
+  window.setModalHeroPhoto = function (src) {
+    if (el.modalBannerImg) el.modalBannerImg.src = src;
   };
 
   window.resetFiltersTrigger = resetAllFilters;
 
-  // Start app
   document.addEventListener('DOMContentLoaded', init);
 
 })();
