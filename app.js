@@ -521,9 +521,9 @@
    * Dynamically calculate major cities and their gym counts/centroids from the loaded dataset
    */
   function getTopCitiesFromData() {
-    if (!studiosData || !studiosData.length) return [];
+    if (!allStudios || !allStudios.length) return [];
     const cityMap = new Map();
-    studiosData.forEach(s => {
+    allStudios.forEach(s => {
       const city = (s.city || '').trim();
       if (!city || city === 'Unknown' || city.toLowerCase() === 'maharashtra' || city.length < 3) return;
       if (!cityMap.has(city)) {
