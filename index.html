@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>FitRadar Map | Multi-Platform Gym & Fitness Pass Explorer</title>
   <meta name="description" content="FitRadar Map — Real-time interactive map of 2,600+ gyms and fitness centers across India. Compare and discover locations across FitPass, FitSquare, and more.">
   <meta name="theme-color" content="#0F172A">
@@ -23,12 +23,12 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
 
-  <!-- Custom Styles -->
-  <link rel="stylesheet" href="styles.css">
+  <!-- Custom Styles with Cache Busting -->
+  <link rel="stylesheet" href="styles.css?v=2.1.0">
 </head>
 <body>
 
-  <!-- Top App Bar -->
+  <!-- Top Navigation Header -->
   <header class="app-header" id="appHeader">
     <div class="header-left">
       <a href="#" class="brand-link" title="FitRadar Map">
@@ -39,7 +39,7 @@
         </div>
       </a>
 
-      <!-- Location Selector Pill -->
+      <!-- Location Pill Button -->
       <button class="location-pill-btn" id="changeLocationBtn" title="Change your search location">
         <span class="location-dot-pulse"></span>
         <span class="location-label" id="refLocationLabel">Detecting location...</span>
@@ -47,46 +47,68 @@
       </button>
     </div>
 
-    <div class="header-center">
-      <!-- Search Box (Desktop & Tablet) -->
-      <div class="search-bar" id="headerSearchBar">
+    <!-- Desktop Search Box -->
+    <div class="header-center" id="desktopSearchWrap">
+      <div class="search-bar">
         <i class="fa-solid fa-magnifying-glass search-icon"></i>
-        <input type="text" id="searchInput" class="search-input" placeholder="Search gym, locality, workout, activity..." autocomplete="off">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search gym name, area, activity..." autocomplete="off">
         <button class="clear-btn" id="clearSearchBtn" title="Clear search" aria-label="Clear search">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
     </div>
 
+    <!-- Action Buttons -->
     <div class="header-right">
-      <!-- Gym Counter Badge -->
+      <!-- Gym Counter Badge (Desktop) -->
       <div class="count-pill" id="headerCounterBadge">
         <span class="count-pulse"></span>
         <span id="headerGymCountText">Loading...</span>
       </div>
 
-      <!-- Recenter Map to Location -->
+      <!-- Mobile Search Toggle Button -->
+      <button class="action-circle-btn mobile-only-btn" id="toggleMobileSearchBtn" title="Search Gyms" aria-label="Search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+      </button>
+
+      <!-- Recenter Map -->
       <button class="action-circle-btn" id="recenterBtn" title="Center map on search location" aria-label="Center map">
         <i class="fa-solid fa-location-crosshairs"></i>
       </button>
 
-      <!-- Map Layer Style Switcher -->
+      <!-- Map Layer Switcher -->
       <button class="action-circle-btn" id="toggleTileLayerBtn" title="Change Map Style" aria-label="Map style">
         <i class="fa-solid fa-layer-group"></i>
       </button>
 
-      <!-- All Filters Trigger (Mobile & Compact) -->
-      <button class="action-circle-btn filter-trigger-btn" id="openMobileFiltersBtn" title="All Filters" aria-label="Filters">
+      <!-- Dark / Light Theme Toggle -->
+      <button class="action-circle-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Theme">
+        <i class="fa-solid fa-moon" id="themeToggleIcon"></i>
+      </button>
+
+      <!-- Filter Drawer Trigger (Mobile) -->
+      <button class="action-circle-btn filter-trigger-btn mobile-only-btn" id="openMobileFiltersBtn" title="Filters" aria-label="Filters">
         <i class="fa-solid fa-sliders"></i>
         <span class="filter-count-badge" id="mobileFilterBadge" style="display: none;">0</span>
       </button>
     </div>
   </header>
 
-  <!-- Filter Bar: Horizontally Scrollable Fast Filter Chips -->
+  <!-- Mobile Collapsible Search Drawer -->
+  <div class="mobile-search-drawer" id="mobileSearchDrawer" style="display: none;">
+    <div class="mobile-search-input-box">
+      <i class="fa-solid fa-magnifying-glass search-icon"></i>
+      <input type="text" id="mobileSearchInput" class="search-input" placeholder="Search gym, area, workout, activity..." autocomplete="off">
+      <button class="clear-btn" id="clearMobileSearchBtn" title="Clear search">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter Strip (Horizontally Scrollable One-Touch Filters) -->
   <nav class="filter-strip" id="filterStrip">
     <div class="filter-strip-inner">
-      <!-- Platform Toggle Chips -->
+      <!-- Platform Chips -->
       <div class="platform-chip-group">
         <button class="platform-chip active" data-platform="fitpass" id="togglePlatformFitpass">
           <span class="p-dot fp-dot"></span>
@@ -102,7 +124,7 @@
 
       <div class="filter-divider"></div>
 
-      <!-- Distance Radius Dropdown Pill -->
+      <!-- Distance Radius Dropdown -->
       <div class="filter-dropdown-wrapper" id="distanceDropdownWrapper">
         <button class="filter-pill dropdown-trigger" id="distancePillBtn">
           <i class="fa-solid fa-route text-indigo-500"></i>
@@ -126,19 +148,17 @@
         </div>
       </div>
 
-      <!-- Quick Toggle: 4.0+ Rating -->
+      <!-- Quick Toggles -->
       <button class="filter-pill" id="ratingFilterBtn">
         <i class="fa-solid fa-star text-amber-500"></i>
         <span>Rating 4.0+</span>
       </button>
 
-      <!-- Quick Toggle: Open Now -->
       <button class="filter-pill" id="openNowFilterBtn">
         <i class="fa-solid fa-clock text-emerald-500"></i>
         <span>Open Now</span>
       </button>
 
-      <!-- Quick Toggle: Verified -->
       <button class="filter-pill" id="verifiedFilterBtn">
         <i class="fa-solid fa-circle-check text-blue-500"></i>
         <span>Verified Only</span>
@@ -191,21 +211,12 @@
     </div>
   </nav>
 
-  <!-- Mobile Search Bar (Appears under filter bar on small phones) -->
-  <div class="mobile-search-bar" id="mobileSearchBar">
-    <i class="fa-solid fa-magnifying-glass search-icon"></i>
-    <input type="text" id="mobileSearchInput" class="search-input" placeholder="Search gym name, area, activity..." autocomplete="off">
-    <button class="clear-btn" id="clearMobileSearchBtn" title="Clear search">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-  </div>
+  <!-- Main View Container: Mode Responsive (Map View vs List View on Mobile; Split View on Desktop) -->
+  <div class="main-layout mode-map" id="mainLayout">
 
-  <!-- Main Viewport Layout -->
-  <div class="main-layout" id="mainLayout">
-
-    <!-- Desktop / Tablet Sidebar (Left Panel) -->
+    <!-- Left Sidebar (Desktop View / Full-Screen List on Mobile) -->
     <aside class="studios-sidebar" id="studiosSidebar">
-      <!-- Sidebar Header / Controls -->
+      <!-- Sidebar Controls Header -->
       <div class="sidebar-header">
         <div class="results-heading">
           <h2 class="results-title" id="resultsCountLabel">Showing 0 gyms</h2>
@@ -223,28 +234,28 @@
         </div>
       </div>
 
-      <!-- Scrollable List of Studio Cards -->
+      <!-- Scrollable Gyms List Container -->
       <div class="studios-scroll-list" id="studiosList">
         <!-- Rendered dynamically -->
       </div>
     </aside>
 
-    <!-- Map Viewport (Edge-to-Edge) -->
+    <!-- Map Viewport -->
     <main class="map-viewport" id="mapViewport">
       <div id="map"></div>
 
-      <!-- Manual Pin Drop Floating Banner -->
+      <!-- Manual Pin Drop Banner -->
       <div id="mapPinBanner" class="map-pin-banner" style="display: none;">
         <div class="pin-banner-message">
           <i class="fa-solid fa-map-pin pin-pulse-icon"></i>
-          <span>Click anywhere on the map to place your search pin</span>
+          <span>Tap anywhere on the map to place your search pin</span>
         </div>
         <button type="button" class="btn-cancel-pin" id="cancelPinModeBtn">
           <i class="fa-solid fa-xmark"></i> <span>Cancel</span>
         </button>
       </div>
 
-      <!-- Floating Map Action Controls -->
+      <!-- Floating Map Action Buttons -->
       <div class="map-action-controls">
         <button class="map-floating-btn" id="mapFitBoundsBtn" title="Fit map to show all filtered gyms">
           <i class="fa-solid fa-expand"></i>
@@ -276,7 +287,7 @@
         </div>
       </div>
 
-      <!-- Mobile Gym Quick Preview Card (Slides up when pin is clicked on mobile) -->
+      <!-- Mobile Gym Quick Preview Card (Slides up when pin is tapped) -->
       <div class="mobile-preview-card" id="mobilePreviewCard" style="display: none;">
         <button class="preview-close-btn" id="closePreviewCardBtn" aria-label="Close preview">
           <i class="fa-solid fa-xmark"></i>
@@ -289,43 +300,9 @@
 
   </div>
 
-  <!-- Mobile Bottom Sheet (Native Mobile Navigation) -->
-  <div class="mobile-bottom-sheet" id="mobileBottomSheet">
-    <!-- Sheet Drag Handle Bar -->
-    <div class="sheet-drag-handle" id="sheetDragHandle">
-      <div class="drag-pill"></div>
-    </div>
-
-    <!-- Sheet Header -->
-    <div class="sheet-header" id="sheetHeader">
-      <div class="sheet-summary">
-        <div class="sheet-title" id="sheetGymCount">0 Gyms Nearby</div>
-        <div class="sheet-sub" id="sheetLocationSub">Within 5 km of your location</div>
-      </div>
-      <div class="sheet-actions">
-        <select id="mobileSortSelect" class="mobile-sort-select">
-          <option value="distance_asc">Nearest</option>
-          <option value="rating_desc">Top Rated</option>
-          <option value="reviews_desc">Popular</option>
-          <option value="name_asc">A-Z</option>
-        </select>
-        <button class="sheet-toggle-btn" id="sheetExpandToggleBtn" aria-label="Expand list">
-          <i class="fa-solid fa-chevron-up"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Sheet Scrollable Content -->
-    <div class="sheet-body" id="sheetBody">
-      <div class="mobile-cards-list" id="mobileCardsList">
-        <!-- Rendered dynamically -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Floating Mobile Switcher Button (Map vs List) -->
+  <!-- Mobile Floating View Switcher Pill (Map vs List) -->
   <div class="mobile-floating-pill" id="mobileFloatingPill">
-    <button class="pill-switch-btn" id="mobileViewToggleBtn">
+    <button class="pill-switch-btn" id="mobileViewToggleBtn" type="button">
       <i class="fa-solid fa-list" id="viewToggleIcon"></i>
       <span id="viewToggleLabel">View List (<span id="mobileCountBadge">0</span>)</span>
     </button>
@@ -336,7 +313,6 @@
        ========================================================================= -->
   <div class="modal-backdrop" id="studioModalBackdrop">
     <div class="modal-sheet" id="studioModalContent">
-      <!-- Modal Header with Hero Banner -->
       <div class="modal-hero">
         <img src="" alt="Studio Banner" class="modal-banner-img" id="modalBannerImg">
         <div class="modal-hero-gradient"></div>
@@ -346,9 +322,7 @@
         <img src="" alt="Studio Logo" class="modal-logo-badge" id="modalLogoImg">
       </div>
 
-      <!-- Modal Body -->
       <div class="modal-scroll-body">
-        <!-- Studio Title & Address -->
         <div class="modal-title-block">
           <div class="modal-title-row">
             <h2 class="modal-studio-title" id="modalStudioName">Studio Name</h2>
@@ -362,10 +336,8 @@
           </div>
         </div>
 
-        <!-- Meta Pills Row (Distance, Rating, Hours, Verified) -->
         <div class="modal-pills-row" id="modalBadgesRow"></div>
 
-        <!-- Supported Platforms & Access Cards (FitPass & FitSquare) -->
         <div class="detail-section" id="modalPlatformsSection">
           <div class="section-heading">
             <i class="fa-solid fa-ticket-simple text-indigo-600"></i>
@@ -374,7 +346,6 @@
           <div class="platform-cards-stack" id="modalPlatformCardsGrid"></div>
         </div>
 
-        <!-- Amenities Grid -->
         <div class="detail-section" id="modalAmenitiesSection">
           <div class="section-heading">
             <i class="fa-solid fa-cube text-emerald-600"></i>
@@ -383,7 +354,6 @@
           <div class="amenities-badge-grid" id="modalAmenitiesGrid"></div>
         </div>
 
-        <!-- Workouts & Activities -->
         <div class="detail-section" id="modalWorkoutsSection">
           <div class="section-heading">
             <i class="fa-solid fa-dumbbell text-rose-600"></i>
@@ -392,7 +362,6 @@
           <div class="workouts-badge-wrap" id="modalWorkoutsList"></div>
         </div>
 
-        <!-- About Description -->
         <div class="detail-section" id="modalAboutSection">
           <div class="section-heading">
             <i class="fa-solid fa-circle-info text-blue-600"></i>
@@ -401,7 +370,6 @@
           <p class="about-paragraph" id="modalAboutText"></p>
         </div>
 
-        <!-- Photo Gallery Carousel/Grid -->
         <div class="detail-section" id="modalGallerySection">
           <div class="section-heading">
             <i class="fa-solid fa-images text-purple-600"></i>
@@ -410,7 +378,6 @@
           <div class="gallery-scroll-row" id="modalGalleryGrid"></div>
         </div>
 
-        <!-- Member Reviews -->
         <div class="detail-section" id="modalReviewsSection">
           <div class="section-heading">
             <i class="fa-solid fa-comments text-amber-600"></i>
@@ -420,7 +387,6 @@
         </div>
       </div>
 
-      <!-- Modal Action Footer -->
       <div class="modal-footer" id="modalFooter">
         <div class="modal-platform-links" id="modalPlatformButtonsContainer"></div>
         <a href="#" target="_blank" rel="noopener noreferrer" class="btn-directions" id="modalGoogleMapsLink">
@@ -432,7 +398,7 @@
   </div>
 
   <!-- =========================================================================
-       MODAL 2: Location Selector (GPS, Search, Map Pin, Recent, Major Cities)
+       MODAL 2: Location Selector
        ========================================================================= -->
   <div class="modal-backdrop" id="locationModalBackdrop">
     <div class="modal-sheet location-modal-sheet" id="locationModalContent">
@@ -450,13 +416,12 @@
       </div>
 
       <div class="location-sheet-body">
-        <!-- Notice if geolocation failed -->
         <div id="locationNotice" class="location-alert" style="display: none;">
           <i class="fa-solid fa-triangle-exclamation"></i>
           <span id="locationNoticeText">Location permission needed. Please search your city or area below.</span>
         </div>
 
-        <!-- GPS Auto Detect Button -->
+        <!-- GPS Button -->
         <button class="loc-action-card gps-card" id="useGpsBtn" type="button">
           <div class="loc-card-icon gps-icon-bg"><i class="fa-solid fa-location-arrow"></i></div>
           <div class="loc-card-text">
@@ -466,12 +431,12 @@
           <span class="loc-card-badge">Auto</span>
         </button>
 
-        <!-- Manual Map Pin Option -->
+        <!-- Drop Pin on Map Button -->
         <button class="loc-action-card pin-card" id="dropPinManualBtn" type="button">
           <div class="loc-card-icon pin-icon-bg"><i class="fa-solid fa-map-pin"></i></div>
           <div class="loc-card-text">
             <div class="loc-card-title">Choose Location on Map</div>
-            <div class="loc-card-desc">Click or tap anywhere on the map to drop a pin</div>
+            <div class="loc-card-desc">Tap anywhere on the map to drop a pin</div>
           </div>
           <span class="loc-card-badge pin-badge">Interactive</span>
         </button>
@@ -484,7 +449,7 @@
         <div class="loc-search-row">
           <div class="loc-input-box">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <input type="text" id="locationSearchInput" placeholder="e.g. Bandra, Koramangala, Connaught Place, Pune..." autocomplete="off">
+            <input type="text" id="locationSearchInput" placeholder="e.g. Goregaon, Bandra, Indiranagar, Pune..." autocomplete="off">
             <button type="button" class="clear-btn" id="clearLocationSearchBtn">
               <i class="fa-solid fa-xmark"></i>
             </button>
@@ -494,10 +459,10 @@
           </button>
         </div>
 
-        <!-- Search Results List -->
+        <!-- Autocomplete Results Dropdown -->
         <div class="loc-results-dropdown" id="locationResultsList" style="display: none;"></div>
 
-        <!-- Recent Searches Section -->
+        <!-- Recent Searches -->
         <div class="loc-section" id="recentLocationsSection" style="display: none;">
           <div class="loc-section-header">
             <span><i class="fa-solid fa-clock-rotate-left text-indigo-500"></i> Recent Searches</span>
@@ -506,7 +471,7 @@
           <div class="loc-pills-flow" id="recentLocationsGrid"></div>
         </div>
 
-        <!-- Major Hubs & Cities (Calculated dynamically from gym density) -->
+        <!-- Major Cities Hubs -->
         <div class="loc-section">
           <div class="loc-section-header">
             <span><i class="fa-solid fa-city text-blue-500"></i> Major Gym Hubs</span>
@@ -536,7 +501,6 @@
       </div>
 
       <div class="filter-sheet-body">
-        <!-- Distance Slider Section -->
         <div class="filter-group">
           <div class="filter-group-title">
             <span>Max Distance Radius</span>
@@ -551,7 +515,6 @@
           </div>
         </div>
 
-        <!-- FitSquare Tiers -->
         <div class="filter-group">
           <div class="filter-group-title">
             <span>FitSquare Membership Tier</span>
@@ -559,7 +522,6 @@
           <div class="chips-grid" id="mobileTierChipsContainer"></div>
         </div>
 
-        <!-- Workouts -->
         <div class="filter-group">
           <div class="filter-group-title">
             <span>Workout Activities</span>
@@ -567,7 +529,6 @@
           <div class="chips-grid" id="mobileWorkoutChipsContainer"></div>
         </div>
 
-        <!-- Amenities -->
         <div class="filter-group">
           <div class="filter-group-title">
             <span>Amenities & Facilities</span>
@@ -591,7 +552,7 @@
   <!-- Load Studios Dataset -->
   <script src="studios_data.js"></script>
 
-  <!-- Application Logic -->
-  <script src="app.js"></script>
+  <!-- Application Logic with Cache Busting -->
+  <script src="app.js?v=2.1.0"></script>
 </body>
 </html>

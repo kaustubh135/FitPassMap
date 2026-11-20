@@ -17,6 +17,7 @@
   let tileLayers = [];
   let activeStudio = null;
   let isManualPinMode = false;
+  let currentMobileView = 'map'; // 'map' or 'list'
 
   // Filter States
   const filterState = {
@@ -40,11 +41,9 @@
   // Storage Keys
   const STORAGE_KEY_LOCATION = 'fitpass_user_location';
   const STORAGE_KEY_RECENTS = 'fitradar_recent_searches';
+  const STORAGE_KEY_THEME = 'fitradar_theme';
 
-  // Mobile Bottom Sheet States: 'peek', 'half', 'expanded'
-  let mobileSheetState = 'peek';
-
-  // Tile Providers (Universal compatibility, no API keys required)
+  // Tile Providers
   const TILE_STYLES = [
     {
       name: 'OpenStreetMap (Standard)',
@@ -123,16 +122,21 @@
   const el = {};
 
   function queryElements() {
+    el.mainLayout = document.getElementById('mainLayout');
     el.map = document.getElementById('map');
     el.changeLocationBtn = document.getElementById('changeLocationBtn');
     el.refLocationLabel = document.getElementById('refLocationLabel');
     el.headerGymCountText = document.getElementById('headerGymCountText');
     el.searchInput = document.getElementById('searchInput');
     el.clearSearchBtn = document.getElementById('clearSearchBtn');
+    el.toggleMobileSearchBtn = document.getElementById('toggleMobileSearchBtn');
+    el.mobileSearchDrawer = document.getElementById('mobileSearchDrawer');
     el.mobileSearchInput = document.getElementById('mobileSearchInput');
     el.clearMobileSearchBtn = document.getElementById('clearMobileSearchBtn');
     el.recenterBtn = document.getElementById('recenterBtn');
     el.toggleTileLayerBtn = document.getElementById('toggleTileLayerBtn');
+    el.themeToggleBtn = document.getElementById('themeToggleBtn');
+    el.themeToggleIcon = document.getElementById('themeToggleIcon');
     el.openMobileFiltersBtn = document.getElementById('openMobileFiltersBtn');
     el.mobileFilterBadge = document.getElementById('mobileFilterBadge');
 
@@ -170,6 +174,7 @@
     el.amenityChipsContainer = document.getElementById('amenityChipsContainer');
 
     // Sidebar & Map
+    el.studiosSidebar = document.getElementById('studiosSidebar');
     el.studiosList = document.getElementById('studiosList');
     el.resultsCountLabel = document.getElementById('resultsCountLabel');
     el.resultsSubtitle = document.getElementById('resultsSubtitle');
@@ -180,14 +185,7 @@
     el.mapCenterMeBtn = document.getElementById('mapCenterMeBtn');
     el.legendUserLabel = document.getElementById('legendUserLabel');
 
-    // Mobile Elements
-    el.mobileBottomSheet = document.getElementById('mobileBottomSheet');
-    el.sheetDragHandle = document.getElementById('sheetDragHandle');
-    el.sheetGymCount = document.getElementById('sheetGymCount');
-    el.sheetLocationSub = document.getElementById('sheetLocationSub');
-    el.mobileSortSelect = document.getElementById('mobileSortSelect');
-    el.sheetExpandToggleBtn = document.getElementById('sheetExpandToggleBtn');
-    el.mobileCardsList = document.getElementById('mobileCardsList');
+    // Mobile Switcher Pill
     el.mobileFloatingPill = document.getElementById('mobileFloatingPill');
     el.mobileViewToggleBtn = document.getElementById('mobileViewToggleBtn');
     el.viewToggleIcon = document.getElementById('viewToggleIcon');
@@ -256,17 +254,56 @@
    */
   async function init() {
     queryElements();
+    initTheme();
     loadDataset();
     initLeafletMap();
     initFiltersData();
     initLocationModalHandlers();
     bindUserEvents();
     initUserLocation();
-    setMobileSheetState('peek');
+    setMobileView('map');
   }
 
   /**
-   * Load Data from window.STUDIOS_DATA or window.FITPASS_DATA or fetch fallback
+   * Theme Management (Light / Dark)
+   */
+  function initTheme() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_THEME);
+      if (saved === 'dark') {
+        document.body.classList.add('dark-theme');
+        document.body.classList.remove('light-theme');
+        if (el.themeToggleIcon) el.themeToggleIcon.className = 'fa-solid fa-sun';
+      } else if (saved === 'light') {
+        document.body.classList.add('light-theme');
+        document.body.classList.remove('dark-theme');
+        if (el.themeToggleIcon) el.themeToggleIcon.className = 'fa-solid fa-moon';
+      } else {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (el.themeToggleIcon) el.themeToggleIcon.className = prefersDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+      }
+    } catch (e) {}
+  }
+
+  function toggleTheme() {
+    const isDark = document.body.classList.contains('dark-theme') ||
+      (!document.body.classList.contains('light-theme') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    if (isDark) {
+      document.body.classList.remove('dark-theme');
+      document.body.classList.add('light-theme');
+      try { localStorage.setItem(STORAGE_KEY_THEME, 'light'); } catch (e) {}
+      if (el.themeToggleIcon) el.themeToggleIcon.className = 'fa-solid fa-moon';
+    } else {
+      document.body.classList.remove('light-theme');
+      document.body.classList.add('dark-theme');
+      try { localStorage.setItem(STORAGE_KEY_THEME, 'dark'); } catch (e) {}
+      if (el.themeToggleIcon) el.themeToggleIcon.className = 'fa-solid fa-sun';
+    }
+  }
+
+  /**
+   * Load Data from window.STUDIOS_DATA or fetch fallback
    */
   function loadDataset() {
     const raw = window.STUDIOS_DATA || window.FITPASS_DATA;
@@ -306,11 +343,10 @@
       </div>
     `;
     if (el.studiosList) el.studiosList.innerHTML = html;
-    if (el.mobileCardsList) el.mobileCardsList.innerHTML = html;
   }
 
   /**
-   * Initialize Leaflet Map & Tile Layers
+   * Initialize Leaflet Map
    */
   function initLeafletMap() {
     map = L.map('map', {
@@ -335,8 +371,8 @@
     const userIcon = L.divIcon({
       className: 'user-marker-icon',
       html: '<div class="user-beacon"></div>',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
     });
 
     userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 })
@@ -360,12 +396,11 @@
 
     map.addLayer(markerCluster);
 
-    // Responsive map invalidateSize
     const refreshMapSize = () => {
       if (map) map.invalidateSize();
     };
     setTimeout(refreshMapSize, 150);
-    setTimeout(refreshMapSize, 600);
+    setTimeout(refreshMapSize, 500);
     window.addEventListener('resize', refreshMapSize);
   }
 
@@ -415,16 +450,11 @@
     if (el.legendUserLabel) {
       el.legendUserLabel.textContent = `You (${name.split(',')[0]})`;
     }
-    if (el.sheetLocationSub) {
-      el.sheetLocationSub.textContent = `Within ${filterState.maxDistance === 99999 ? 'all' : filterState.maxDistance + ' km'} of ${name.split(',')[0]}`;
-    }
 
     recalculateAllDistances();
 
     if (map) {
-      if (userMarker) {
-        userMarker.setLatLng(userCoords);
-      }
+      if (userMarker) userMarker.setLatLng(userCoords);
       map.setView(userCoords, 13, { animate: true });
     }
 
@@ -432,7 +462,7 @@
   }
 
   /**
-   * Reverse Geocoding with Nominatim
+   * Reverse Geocoding via Nominatim
    */
   async function reverseGeocodeCoords(lat, lng) {
     try {
@@ -448,7 +478,6 @@
       userLocationName = cleanName;
       if (el.refLocationLabel) el.refLocationLabel.textContent = cleanName;
       if (el.legendUserLabel) el.legendUserLabel.textContent = `You (${cleanName.split(',')[0]})`;
-      if (el.sheetLocationSub) el.sheetLocationSub.textContent = `Within ${filterState.maxDistance === 99999 ? 'all' : filterState.maxDistance + ' km'} of ${cleanName.split(',')[0]}`;
 
       try {
         localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify({ lat, lng, name: cleanName }));
@@ -496,9 +525,6 @@
     );
   }
 
-  /**
-   * Initialize user location on launch
-   */
   function initUserLocation() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOCATION);
@@ -511,7 +537,6 @@
       }
     } catch (e) {}
 
-    // Fallback: try GPS detection
     requestDeviceLocation(false);
   }
 
@@ -619,7 +644,7 @@
     closeLocationModal();
 
     if (el.mapPinBanner) el.mapPinBanner.style.display = 'flex';
-    setMobileSheetState('peek');
+    setMobileView('map');
 
     if (map) {
       map.once('click', handleManualPinClick);
@@ -659,7 +684,7 @@
   }
 
   /**
-   * Initialize Location Modal Controls
+   * Location Modal Handlers
    */
   function initLocationModalHandlers() {
     renderRecentLocations();
@@ -812,10 +837,10 @@
   }
 
   /**
-   * Initialize Dynamic Filters Options (Tiers, Workouts, Amenities)
+   * Initialize Dynamic Filters Options
    */
   function initFiltersData() {
-    // 1. FitSquare Tiers
+    // 1. Tiers
     const rawData = window.STUDIOS_DATA || window.FITPASS_DATA;
     let tiers = (rawData && rawData.metadata && rawData.metadata.tiers) ? rawData.metadata.tiers : [];
     if (!tiers || tiers.length === 0) {
@@ -944,7 +969,39 @@
   }
 
   /**
-   * Bind User Interface Events
+   * Mobile View Switcher (Map Mode vs List Mode)
+   */
+  function setMobileView(view) {
+    currentMobileView = view;
+    if (!el.mainLayout) return;
+
+    if (view === 'map') {
+      el.mainLayout.classList.remove('mode-list');
+      el.mainLayout.classList.add('mode-map');
+      if (el.viewToggleLabel) el.viewToggleLabel.innerHTML = `View List (<span id="mobileCountBadge">${filteredStudios.length}</span>)`;
+      if (el.viewToggleIcon) el.viewToggleIcon.className = 'fa-solid fa-list';
+      if (map) {
+        setTimeout(() => map.invalidateSize(), 150);
+      }
+    } else {
+      el.mainLayout.classList.remove('mode-map');
+      el.mainLayout.classList.add('mode-list');
+      if (el.viewToggleLabel) el.viewToggleLabel.textContent = 'View Map';
+      if (el.viewToggleIcon) el.viewToggleIcon.className = 'fa-solid fa-map';
+      if (el.mobilePreviewCard) el.mobilePreviewCard.style.display = 'none';
+    }
+  }
+
+  function toggleMobileView() {
+    if (currentMobileView === 'map') {
+      setMobileView('list');
+    } else {
+      setMobileView('map');
+    }
+  }
+
+  /**
+   * Bind DOM Events
    */
   function bindUserEvents() {
     // Platform Toggles
@@ -952,7 +1009,7 @@
       if (!btn) return;
       btn.addEventListener('click', () => {
         if (filterState.selectedPlatforms.has(platformKey)) {
-          if (filterState.selectedPlatforms.size === 1) return; // Keep at least one
+          if (filterState.selectedPlatforms.size === 1) return;
           filterState.selectedPlatforms.delete(platformKey);
           btn.classList.remove('active');
         } else {
@@ -992,7 +1049,17 @@
       });
     }
 
-    // Mobile Search Input
+    // Mobile Search Input & Drawer Toggle
+    if (el.toggleMobileSearchBtn && el.mobileSearchDrawer) {
+      el.toggleMobileSearchBtn.addEventListener('click', () => {
+        const isVisible = el.mobileSearchDrawer.style.display !== 'none';
+        el.mobileSearchDrawer.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible && el.mobileSearchInput) {
+          el.mobileSearchInput.focus();
+        }
+      });
+    }
+
     if (el.mobileSearchInput) {
       el.mobileSearchInput.addEventListener('input', (e) => {
         if (el.searchInput) el.searchInput.value = e.target.value;
@@ -1006,6 +1073,11 @@
         if (el.searchInput) el.searchInput.value = '';
         handleSearchInput('');
       });
+    }
+
+    // Theme Toggle Button
+    if (el.themeToggleBtn) {
+      el.themeToggleBtn.addEventListener('click', toggleTheme);
     }
 
     // Distance Dropdown & Presets
@@ -1116,14 +1188,6 @@
     if (el.sortSelect) {
       el.sortSelect.addEventListener('change', (e) => {
         filterState.sortBy = e.target.value;
-        if (el.mobileSortSelect) el.mobileSortSelect.value = e.target.value;
-        applyFilters();
-      });
-    }
-    if (el.mobileSortSelect) {
-      el.mobileSortSelect.addEventListener('change', (e) => {
-        filterState.sortBy = e.target.value;
-        if (el.sortSelect) el.sortSelect.value = e.target.value;
         applyFilters();
       });
     }
@@ -1142,7 +1206,7 @@
     if (el.mapFitBoundsBtn) {
       el.mapFitBoundsBtn.addEventListener('click', () => {
         if (markerCluster && markerCluster.getLayers().length > 0) {
-          map.fitBounds(markerCluster.getBounds(), { padding: [40, 40], maxZoom: 16 });
+          map.fitBounds(markerCluster.getBounds(), { padding: [30, 30], maxZoom: 16 });
         }
       });
     }
@@ -1159,21 +1223,12 @@
       });
     }
 
-    // Mobile Bottom Sheet Drag & Interaction
-    setupMobileBottomSheetEvents();
-
-    // Mobile Floating Pill (View Map / View List)
+    // Mobile View Switcher Pill
     if (el.mobileViewToggleBtn) {
-      el.mobileViewToggleBtn.addEventListener('click', () => {
-        if (mobileSheetState === 'peek') {
-          setMobileSheetState('half');
-        } else {
-          setMobileSheetState('peek');
-        }
-      });
+      el.mobileViewToggleBtn.addEventListener('click', toggleMobileView);
     }
 
-    // Mobile Filters Modal Trigger
+    // Mobile Filters Modal
     if (el.openMobileFiltersBtn && el.mobileFilterModalBackdrop) {
       el.openMobileFiltersBtn.addEventListener('click', () => {
         el.mobileFilterModalBackdrop.classList.add('open');
@@ -1245,13 +1300,11 @@
       if (el.sliderValLabel) el.sliderValLabel.textContent = 'All India';
       if (el.mobileSliderDistanceVal) el.mobileSliderDistanceVal.textContent = 'All India';
       if (el.resultsSubtitle) el.resultsSubtitle.textContent = 'Nationwide';
-      if (el.sheetLocationSub) el.sheetLocationSub.textContent = 'Nationwide';
     } else {
       if (el.distancePillLabel) el.distancePillLabel.textContent = `< ${val} km`;
       if (el.sliderValLabel) el.sliderValLabel.textContent = `${val} km`;
       if (el.mobileSliderDistanceVal) el.mobileSliderDistanceVal.textContent = `${val} km`;
       if (el.resultsSubtitle) el.resultsSubtitle.textContent = `within ${val} km`;
-      if (el.sheetLocationSub) el.sheetLocationSub.textContent = `Within ${val} km of ${userLocationName.split(',')[0]}`;
     }
     if (el.distanceRangeSlider) el.distanceRangeSlider.value = Math.min(50, val);
 
@@ -1272,92 +1325,6 @@
     }
 
     applyFilters();
-  }
-
-  /**
-   * Setup Mobile Bottom Sheet States & Drag Gestures
-   */
-  function setupMobileBottomSheetEvents() {
-    if (!el.mobileBottomSheet || !el.sheetDragHandle) return;
-
-    if (el.sheetExpandToggleBtn) {
-      el.sheetExpandToggleBtn.addEventListener('click', () => {
-        if (mobileSheetState === 'peek') setMobileSheetState('half');
-        else if (mobileSheetState === 'half') setMobileSheetState('expanded');
-        else setMobileSheetState('peek');
-      });
-    }
-
-    if (el.sheetHeader) {
-      el.sheetHeader.addEventListener('click', (e) => {
-        if (e.target.closest('select')) return;
-        if (mobileSheetState === 'peek') setMobileSheetState('half');
-      });
-    }
-
-    // Touch Drag Handling
-    let startY = 0;
-    let currentY = 0;
-    let isDragging = false;
-
-    el.sheetDragHandle.addEventListener('touchstart', (e) => {
-      startY = e.touches[0].clientY;
-      isDragging = true;
-    }, { passive: true });
-
-    window.addEventListener('touchmove', (e) => {
-      if (!isDragging) return;
-      currentY = e.touches[0].clientY;
-    }, { passive: true });
-
-    window.addEventListener('touchend', () => {
-      if (!isDragging) return;
-      isDragging = false;
-      const deltaY = currentY - startY;
-
-      if (Math.abs(deltaY) > 30) {
-        if (deltaY < 0) {
-          // Dragged up
-          if (mobileSheetState === 'peek') setMobileSheetState('half');
-          else if (mobileSheetState === 'half') setMobileSheetState('expanded');
-        } else {
-          // Dragged down
-          if (mobileSheetState === 'expanded') setMobileSheetState('half');
-          else if (mobileSheetState === 'half') setMobileSheetState('peek');
-        }
-      }
-    });
-  }
-
-  function setMobileSheetState(state) {
-    mobileSheetState = state;
-    if (!el.mobileBottomSheet) return;
-
-    el.mobileBottomSheet.classList.remove('state-peek', 'state-half', 'state-expanded');
-    el.mobileBottomSheet.classList.add(`state-${state}`);
-
-    if (el.sheetExpandToggleBtn) {
-      const icon = el.sheetExpandToggleBtn.querySelector('i');
-      if (icon) {
-        icon.className = state === 'expanded' ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
-      }
-    }
-
-    // Update Floating Switcher Pill
-    if (el.mobileFloatingPill && el.viewToggleLabel && el.viewToggleIcon) {
-      if (state === 'peek') {
-        el.viewToggleLabel.innerHTML = `View List (<span id="mobileCountBadge">${filteredStudios.length}</span>)`;
-        el.viewToggleIcon.className = 'fa-solid fa-list';
-      } else {
-        el.viewToggleLabel.textContent = 'View Map';
-        el.viewToggleIcon.className = 'fa-solid fa-map';
-      }
-    }
-
-    // Hide quick preview card if sheet is expanded
-    if (state === 'expanded' && el.mobilePreviewCard) {
-      el.mobilePreviewCard.style.display = 'none';
-    }
   }
 
   /**
@@ -1437,7 +1404,7 @@
         if (!nameMatch && !localityMatch && !addressMatch && !workoutMatch) return false;
       }
 
-      // Selected Workouts (Match at least one)
+      // Selected Workouts
       if (filterState.selectedWorkouts.size > 0) {
         const setW = new Set(studio.workouts || []);
         let match = false;
@@ -1447,7 +1414,7 @@
         if (!match) return false;
       }
 
-      // Selected Amenities (Must have ALL selected)
+      // Selected Amenities
       if (filterState.selectedAmenities.size > 0) {
         const setA = new Set(studio.amenities || []);
         for (const a of filterState.selectedAmenities) {
@@ -1458,7 +1425,7 @@
       return true;
     });
 
-    // Sort Results
+    // Sort
     filteredStudios.sort((a, b) => {
       switch (filterState.sortBy) {
         case 'distance_asc':
@@ -1478,13 +1445,9 @@
     const totalCount = filteredStudios.length;
     if (el.resultsCountLabel) el.resultsCountLabel.textContent = `Showing ${totalCount.toLocaleString()} gym${totalCount === 1 ? '' : 's'}`;
     if (el.headerGymCountText) el.headerGymCountText.textContent = `${totalCount.toLocaleString()} Gyms Nearby`;
-    if (el.sheetGymCount) el.sheetGymCount.textContent = `${totalCount.toLocaleString()} Gyms Nearby`;
     if (el.mobileCountBadge) el.mobileCountBadge.textContent = totalCount.toLocaleString();
 
-    // Update Filter Active Badge
     updateFilterBadgeCount();
-
-    // Render Markers & Cards
     renderMapMarkers();
     renderCardsList();
   }
@@ -1537,7 +1500,7 @@
   }
 
   /**
-   * Render Map Markers with Custom Pins
+   * Render Map Markers
    */
   function renderMapMarkers() {
     if (!markerCluster) return;
@@ -1558,16 +1521,15 @@
       const gymIcon = L.divIcon({
         className: 'gym-marker-icon',
         html: `<div class="gym-pin ${pinClass}"><i class="fa-solid fa-dumbbell"></i></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -30]
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -28]
       });
 
       const marker = L.marker([studio.lat, studio.lng], { icon: gymIcon });
       const isOpen = isStudioOpenNow(studio.open_time);
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
 
-      // Platform Badges Html
       const platformBadgesHtml = platforms.map(p => {
         if (p === 'fitpass') return '<span class="platform-tag pt-fitpass">FitPass</span>';
         if (p === 'fitsquare') {
@@ -1577,7 +1539,6 @@
         return `<span class="platform-tag">${escapeHtml(p)}</span>`;
       }).join(' ');
 
-      // Desktop Popup HTML
       const popupHtml = `
         <div class="popup-card">
           <div class="popup-img-wrap">
@@ -1585,9 +1546,7 @@
             ${studio.logo ? `<img class="popup-logo" src="${studio.logo}" alt="Logo" onerror="this.style.display='none'">` : ''}
           </div>
           <div class="popup-body">
-            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;">
-              ${platformBadgesHtml}
-            </div>
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;">${platformBadgesHtml}</div>
             <h3 class="popup-name">${escapeHtml(studio.name)}</h3>
             <div class="popup-location-line">
               <i class="fa-solid fa-location-dot" style="color: var(--primary);"></i>
@@ -1603,15 +1562,6 @@
                 ● ${isOpen ? 'Open Now' : 'Closed'}
               </div>
             </div>
-            ${(studio.amenities && studio.amenities.length > 0) ? `
-              <div class="popup-amenities-row">
-                ${studio.amenities.slice(0, 4).map(a => {
-                  const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
-                  return `<span class="popup-amenity-chip"><i class="${icon}"></i> <span>${escapeHtml(a)}</span></span>`;
-                }).join('')}
-                ${studio.amenities.length > 4 ? `<span class="popup-amenity-chip">+${studio.amenities.length - 4}</span>` : ''}
-              </div>
-            ` : ''}
             <button class="popup-btn-detail" onclick="window.viewStudioDetails('${studio.id}')">
               <i class="fa-solid fa-circle-info"></i> View Full Details
             </button>
@@ -1619,14 +1569,11 @@
         </div>
       `;
 
-      marker.bindPopup(popupHtml, { maxWidth: 300, minWidth: 280 });
+      marker.bindPopup(popupHtml, { maxWidth: 290, minWidth: 260 });
 
       marker.on('click', () => {
-        // Highlight in list
         highlightStudioCard(studio.id);
-
-        // On mobile, show docked preview card
-        if (window.innerWidth <= 960) {
+        if (window.innerWidth < 900) {
           showMobilePreviewCard(studio);
         }
       });
@@ -1668,11 +1615,11 @@
           <div style="display: flex; gap: 4px; margin-bottom: 2px;">${platformBadgesHtml}</div>
           <div class="preview-name">${escapeHtml(studio.name)}</div>
           <div class="preview-meta">
-            <strong style="color: var(--primary);">${studio.distance} km</strong> • ${escapeHtml(studio.locality || studio.city)}
+            <strong style="color: var(--primary);">${studio.distance} km away</strong> • ${escapeHtml(studio.locality || studio.city)}
           </div>
           <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px;">
             <span class="card-rating"><i class="fa-solid fa-star"></i> ${ratingStars} (${studio.rating_count})</span>
-            <span class="card-open-status ${isOpen ? 'status-open' : 'status-closed'}">● ${isOpen ? 'Open Now' : 'Closed'}</span>
+            <span class="card-open-status ${isOpen ? 'status-open' : 'status-closed'}">● ${isOpen ? 'Open' : 'Closed'}</span>
           </div>
         </div>
       </div>
@@ -1687,19 +1634,17 @@
     `;
 
     el.mobilePreviewCard.style.display = 'block';
-    setMobileSheetState('peek');
   }
 
   /**
-   * Render Studio Cards (Desktop Sidebar & Mobile Sheet)
+   * Render Studio Cards (Unified list for Desktop Sidebar & Mobile Full-Screen List)
    */
   function renderCardsList() {
     if (!el.studiosList) return;
     el.studiosList.innerHTML = '';
-    if (el.mobileCardsList) el.mobileCardsList.innerHTML = '';
 
     if (filteredStudios.length === 0) {
-      const emptyHtml = `
+      el.studiosList.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon"><i class="fa-solid fa-dumbbell"></i></div>
           <h3>No Gyms Found</h3>
@@ -1707,45 +1652,34 @@
           <button type="button" class="btn-empty-reset" onclick="window.resetFiltersTrigger()">Reset Filters</button>
         </div>
       `;
-      el.studiosList.innerHTML = emptyHtml;
-      if (el.mobileCardsList) el.mobileCardsList.innerHTML = emptyHtml;
       return;
     }
 
     const initialBatch = filteredStudios.slice(0, 35);
-    appendCardsToContainer(initialBatch, el.studiosList, false);
-    if (el.mobileCardsList) appendCardsToContainer(initialBatch, el.mobileCardsList, true);
+    appendCards(initialBatch);
 
     let renderedCount = initialBatch.length;
-    const handleScroll = (container) => {
+    el.studiosList.onscroll = () => {
       if (renderedCount >= filteredStudios.length) return;
-      const { scrollTop, scrollHeight, clientHeight } = container;
+      const { scrollTop, scrollHeight, clientHeight } = el.studiosList;
       if (scrollTop + clientHeight >= scrollHeight - 350) {
         const nextBatch = filteredStudios.slice(renderedCount, renderedCount + 25);
-        appendCardsToContainer(nextBatch, el.studiosList, false);
-        if (el.mobileCardsList) appendCardsToContainer(nextBatch, el.mobileCardsList, true);
+        appendCards(nextBatch);
         renderedCount += nextBatch.length;
       }
     };
-
-    el.studiosList.onscroll = () => handleScroll(el.studiosList);
-    const sheetBody = document.getElementById('sheetBody');
-    if (sheetBody) sheetBody.onscroll = () => handleScroll(sheetBody);
   }
 
-  function appendCardsToContainer(studios, container, isMobile = false) {
-    if (!container) return;
-
+  function appendCards(studios) {
     studios.forEach(studio => {
       const card = document.createElement('div');
       card.className = 'studio-card';
-      card.id = `${isMobile ? 'm-' : ''}studio-card-${studio.id}`;
+      card.id = `studio-card-${studio.id}`;
 
       const ratingStars = studio.rating ? studio.rating.toFixed(1) : 'New';
       const isOpen = isStudioOpenNow(studio.open_time);
       const platforms = studio.platforms || ['fitpass'];
 
-      // Platform Badges
       const cardPlatformsHtml = platforms.map(p => {
         if (p === 'fitpass') return '<span class="platform-tag pt-fitpass"><i class="fa-solid fa-check"></i> FitPass</span>';
         if (p === 'fitsquare') {
@@ -1755,7 +1689,6 @@
         return `<span class="platform-tag">${escapeHtml(p)}</span>`;
       }).join('');
 
-      // Amenity Icons Preview
       const amenitiesHtml = (studio.amenities || []).slice(0, 4).map(a => {
         const icon = AMENITY_ICONS[a] || 'fa-solid fa-check';
         return `<span class="card-amenity-icon" title="${escapeHtml(a)}"><i class="${icon}"></i></span>`;
@@ -1804,42 +1737,40 @@
         focusStudioOnMap(studio);
       });
 
-      container.appendChild(card);
+      el.studiosList.appendChild(card);
     });
   }
 
   function focusStudioOnMap(studio) {
     highlightStudioCard(studio.id);
 
+    if (window.innerWidth < 900) {
+      setMobileView('map');
+      showMobilePreviewCard(studio);
+    }
+
     const marker = studioMarkersMap.get(String(studio.id));
     if (marker && markerCluster && map) {
       markerCluster.zoomToShowLayer(marker, () => {
         map.setView([studio.lat, studio.lng], Math.max(map.getZoom(), 15), { animate: true });
-        marker.openPopup();
+        if (window.innerWidth >= 900) {
+          marker.openPopup();
+        }
       });
-    }
-
-    if (window.innerWidth <= 960) {
-      showMobilePreviewCard(studio);
     }
   }
 
   function highlightStudioCard(studioId) {
     document.querySelectorAll('.studio-card.active').forEach(c => c.classList.remove('active'));
-    const desktopCard = document.getElementById(`studio-card-${studioId}`);
-    if (desktopCard) {
-      desktopCard.classList.add('active');
-      desktopCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-    const mobileCard = document.getElementById(`m-studio-card-${studioId}`);
-    if (mobileCard) {
-      mobileCard.classList.add('active');
-      mobileCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const card = document.getElementById(`studio-card-${studioId}`);
+    if (card) {
+      card.classList.add('active');
+      card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }
 
   /**
-   * Studio Details Full Modal / Slide-Over Sheet
+   * Studio Details Modal
    */
   function openModal(studio) {
     activeStudio = studio;
@@ -1951,7 +1882,7 @@
       el.modalWorkoutsSection.style.display = 'none';
     }
 
-    // About Section
+    // About
     if (studio.about) {
       el.modalAboutSection.style.display = 'flex';
       el.modalAboutText.textContent = studio.about;
