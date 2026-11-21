@@ -33,46 +33,62 @@
     sortBy: 'distance_asc'
   };
 
-  // User Location State
-  let userCoords = [19.0760, 72.8777]; // Default Mumbai
-  let userLocationName = 'Detecting location...';
+  // User Location State (Default Oberoi Mall, Goregaon East)
+  let userCoords = [19.1742, 72.86041];
+  let userLocationName = 'Goregaon East, Mumbai';
   let isLocationSet = false;
 
   // Storage Keys
   const STORAGE_KEY_LOCATION = 'fitpass_user_location';
   const STORAGE_KEY_RECENTS = 'fitradar_recent_searches';
   const STORAGE_KEY_THEME = 'fitradar_theme';
+  const STORAGE_KEY_LAYER = 'fitradar_tile_layer';
 
-  // Tile Providers
+  // Tile Providers (100% Free, Reliable, No API Key Required)
   const TILE_STYLES = [
     {
-      name: 'OpenStreetMap (Standard)',
+      id: 'osm',
+      name: 'OpenStreetMap',
+      subtitle: 'Standard Map',
+      icon: 'fa-regular fa-map',
       url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
     },
     {
-      name: 'Google Maps (Streets)',
-      url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-      attribution: '&copy; Google Maps',
-      maxZoom: 20
+      id: 'voyager',
+      name: 'Carto Voyager',
+      subtitle: 'Clean & Colorful',
+      icon: 'fa-solid fa-compass',
+      url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+      attribution: '&copy; CARTO &copy; OpenStreetMap',
+      maxZoom: 19
     },
     {
-      name: 'Esri World Street Map',
+      id: 'dark',
+      name: 'Carto Dark',
+      subtitle: 'Night Mode',
+      icon: 'fa-solid fa-moon',
+      url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+      attribution: '&copy; CARTO &copy; OpenStreetMap',
+      maxZoom: 19
+    },
+    {
+      id: 'esri-streets',
+      name: 'Esri World Street',
+      subtitle: 'Detailed Streets',
+      icon: 'fa-solid fa-road',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
       attribution: 'Tiles &copy; Esri',
       maxZoom: 19
     },
     {
-      name: 'Carto Voyager (Clean)',
-      url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-      maxZoom: 19
-    },
-    {
-      name: 'Carto Dark (Night Mode)',
-      url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+      id: 'esri-satellite',
+      name: 'Esri Satellite',
+      subtitle: 'Aerial Imagery',
+      icon: 'fa-solid fa-earth-americas',
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attribution: 'Tiles &copy; Esri, Earthstar Geographics',
       maxZoom: 19
     }
   ];
@@ -133,8 +149,10 @@
     el.mobileSearchDrawer = document.getElementById('mobileSearchDrawer');
     el.mobileSearchInput = document.getElementById('mobileSearchInput');
     el.clearMobileSearchBtn = document.getElementById('clearMobileSearchBtn');
-    el.recenterBtn = document.getElementById('recenterBtn');
+    el.recenterBtn = document.getElementById('mapCenterMeBtn');
     el.toggleTileLayerBtn = document.getElementById('toggleTileLayerBtn');
+    el.mapLayersMenu = document.getElementById('mapLayersMenu');
+    el.layersOptionsList = document.getElementById('layersOptionsList');
     el.themeToggleBtn = document.getElementById('themeToggleBtn');
     el.themeToggleIcon = document.getElementById('themeToggleIcon');
     el.openMobileFiltersBtn = document.getElementById('openMobileFiltersBtn');
@@ -357,6 +375,15 @@
       minZoom: 4
     });
 
+    // Check saved tile layer style
+    let initialIndex = 0;
+    try {
+      const savedLayerId = localStorage.getItem(STORAGE_KEY_LAYER);
+      const matchIdx = TILE_STYLES.findIndex(s => s.id === savedLayerId);
+      if (matchIdx >= 0) initialIndex = matchIdx;
+    } catch (e) {}
+    currentTileIndex = initialIndex;
+
     TILE_STYLES.forEach((style, index) => {
       const layer = L.tileLayer(style.url, {
         attribution: style.attribution,
@@ -364,26 +391,13 @@
         subdomains: style.subdomains || 'abc'
       });
       tileLayers.push(layer);
-      if (index === 0) layer.addTo(map);
+      if (index === currentTileIndex) layer.addTo(map);
     });
+
+    renderMapLayersMenu();
 
     // User Beacon Marker
-    const userIcon = L.divIcon({
-      className: 'user-marker-icon',
-      html: '<div class="user-beacon"></div>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
-    });
-
-    userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 })
-      .addTo(map)
-      .bindPopup(`
-        <div style="padding: 10px; font-family: inherit;">
-          <div style="font-weight: 800; font-size: 14px; color: var(--secondary);">📍 You are here</div>
-          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${escapeHtml(userLocationName)}</div>
-          <div style="font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 4px;">Search origin</div>
-        </div>
-      `, { offset: [0, -6] });
+    updateUserMarkerPopup();
 
     // MarkerCluster Group
     markerCluster = L.markerClusterGroup({
@@ -396,12 +410,118 @@
 
     map.addLayer(markerCluster);
 
+    // Map Click Handler: Dismiss mobile preview & dropdowns
+    map.on('click', () => {
+      if (el.mobilePreviewCard) el.mobilePreviewCard.style.display = 'none';
+      closeAllDropdowns(null);
+      if (el.mapLayersMenu) el.mapLayersMenu.style.display = 'none';
+    });
+
     const refreshMapSize = () => {
       if (map) map.invalidateSize();
     };
     setTimeout(refreshMapSize, 150);
     setTimeout(refreshMapSize, 500);
     window.addEventListener('resize', refreshMapSize);
+  }
+
+  /**
+   * Render Map Layers Popover Menu & Style Switcher
+   */
+  function renderMapLayersMenu() {
+    if (!el.layersOptionsList) return;
+    el.layersOptionsList.innerHTML = TILE_STYLES.map((style, idx) => {
+      const isAct = idx === currentTileIndex;
+      return `
+        <button type="button" class="layer-option-btn ${isAct ? 'active' : ''}" data-layer-idx="${idx}">
+          <div class="layer-left">
+            <i class="${style.icon}"></i>
+            <div>
+              <div>${escapeHtml(style.name)}</div>
+              <div style="font-size: 10px; opacity: 0.7;">${escapeHtml(style.subtitle || '')}</div>
+            </div>
+          </div>
+          <i class="fa-solid fa-check layer-check"></i>
+        </button>
+      `;
+    }).join('');
+
+    el.layersOptionsList.querySelectorAll('.layer-option-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.dataset.layerIdx, 10);
+        selectTileLayer(idx);
+      });
+    });
+  }
+
+  function selectTileLayer(idx) {
+    if (!map || !tileLayers.length || idx < 0 || idx >= tileLayers.length) return;
+    map.removeLayer(tileLayers[currentTileIndex]);
+    currentTileIndex = idx;
+    map.addLayer(tileLayers[currentTileIndex]);
+    const style = TILE_STYLES[currentTileIndex];
+    try {
+      localStorage.setItem(STORAGE_KEY_LAYER, style.id);
+    } catch (e) {}
+    renderMapLayersMenu();
+    if (el.mapLayersMenu) el.mapLayersMenu.style.display = 'none';
+  }
+
+  /**
+   * Update or create the User Beacon Marker & Popup Content
+   */
+  function updateUserMarkerPopup() {
+    if (!map || !userCoords) return;
+    if (!userMarker) {
+      const userIcon = L.divIcon({
+        className: 'user-marker-icon',
+        html: '<div class="user-beacon"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
+      });
+      userMarker = L.marker(userCoords, { icon: userIcon, zIndexOffset: 2000 }).addTo(map);
+    } else {
+      userMarker.setLatLng(userCoords);
+    }
+
+    const radiusText = filterState.maxDistance >= 99999 ? 'All India' : `< ${filterState.maxDistance} km`;
+    const popupHtml = `
+      <div class="user-loc-popup">
+        <div class="user-loc-badge"><i class="fa-solid fa-location-crosshairs"></i> Your Location</div>
+        <div class="user-loc-name">${escapeHtml(userLocationName)}</div>
+        <div class="user-loc-sub">Search radius: ${radiusText}</div>
+        <button class="user-loc-btn" onclick="window.openLocationSelector()">
+          <i class="fa-solid fa-pen-to-square"></i> Change Location
+        </button>
+      </div>
+    `;
+    userMarker.bindPopup(popupHtml, { offset: [0, -8] });
+  }
+
+  /**
+   * Fit map viewport to coverage radius (e.g. 5km)
+   */
+  function fitMapToRadius(radiusKm = filterState.maxDistance, animated = true) {
+    if (!map || !userCoords) return;
+    const r = (radiusKm >= 99999) ? 25 : Math.min(Math.max(radiusKm, 1), 50);
+    // 1 deg latitude is approx 110.574 km
+    const latDelta = (r * 1.08) / 110.574;
+    // 1 deg longitude at user latitude
+    const rad = userCoords[0] * Math.PI / 180;
+    const cosLat = Math.max(0.1, Math.cos(rad));
+    const lngDelta = (r * 1.08) / (111.320 * cosLat);
+
+    const bounds = L.latLngBounds(
+      [userCoords[0] - latDelta, userCoords[1] - lngDelta],
+      [userCoords[0] + latDelta, userCoords[1] + lngDelta]
+    );
+
+    map.fitBounds(bounds, {
+      padding: [16, 16],
+      maxZoom: 15,
+      animate: animated
+    });
   }
 
   /**
@@ -454,8 +574,8 @@
     recalculateAllDistances();
 
     if (map) {
-      if (userMarker) userMarker.setLatLng(userCoords);
-      map.setView(userCoords, 13, { animate: true });
+      updateUserMarkerPopup();
+      fitMapToRadius(filterState.maxDistance, true);
     }
 
     applyFilters();
@@ -478,6 +598,7 @@
       userLocationName = cleanName;
       if (el.refLocationLabel) el.refLocationLabel.textContent = cleanName;
       if (el.legendUserLabel) el.legendUserLabel.textContent = `You (${cleanName.split(',')[0]})`;
+      updateUserMarkerPopup();
 
       try {
         localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify({ lat, lng, name: cleanName }));
@@ -760,9 +881,12 @@
       renderRecentLocations();
       populateMajorCities();
       el.locationModalBackdrop.classList.add('open');
-      setTimeout(() => {
-        if (el.locationSearchInput) el.locationSearchInput.focus();
-      }, 150);
+      // Only auto-focus on desktop devices to avoid opening mobile virtual keyboard
+      if (window.innerWidth >= 768) {
+        setTimeout(() => {
+          if (el.locationSearchInput) el.locationSearchInput.focus();
+        }, 150);
+      }
     }
   }
 
@@ -1031,6 +1155,11 @@
       debounceTimer = setTimeout(() => {
         filterState.search = val.toLowerCase();
         applyFilters();
+
+        // On mobile: if searching, show the matching gyms list immediately!
+        if (val.length > 0 && window.innerWidth < 900 && currentMobileView === 'map') {
+          setMobileView('list');
+        }
       }, 200);
     };
 
@@ -1065,6 +1194,14 @@
         if (el.searchInput) el.searchInput.value = e.target.value;
         handleSearchInput(e.target.value.trim());
       });
+      el.mobileSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur(); // Dismiss mobile keyboard
+          if (window.innerWidth < 900) {
+            setMobileView('list');
+          }
+        }
+      });
     }
 
     if (el.clearMobileSearchBtn) {
@@ -1080,12 +1217,36 @@
       el.themeToggleBtn.addEventListener('click', toggleTheme);
     }
 
+    // Helper for robust fixed-position filter dropdowns
+    function toggleFilterDropdown(wrapper) {
+      if (!wrapper) return;
+      const isOpen = wrapper.classList.contains('open');
+      closeAllDropdowns(null);
+      if (isOpen) return;
+
+      wrapper.classList.add('open');
+      const menu = wrapper.querySelector('.filter-menu');
+      const trigger = wrapper.querySelector('.dropdown-trigger') || wrapper;
+      if (menu && trigger) {
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+        const menuWidth = Math.min(menu.offsetWidth || 230, window.innerWidth - 16);
+        let left = rect.left;
+        if (left + menuWidth > window.innerWidth - 8) {
+          left = window.innerWidth - menuWidth - 8;
+        }
+        if (left < 8) left = 8;
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.zIndex = '2500';
+      }
+    }
+
     // Distance Dropdown & Presets
     if (el.distancePillBtn && el.distanceDropdownWrapper) {
       el.distancePillBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllDropdowns(el.distanceDropdownWrapper);
-        el.distanceDropdownWrapper.classList.toggle('open');
+        toggleFilterDropdown(el.distanceDropdownWrapper);
       });
     }
 
@@ -1122,8 +1283,7 @@
     if (el.tierPillBtn && el.tierDropdownWrapper) {
       el.tierPillBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllDropdowns(el.tierDropdownWrapper);
-        el.tierDropdownWrapper.classList.toggle('open');
+        toggleFilterDropdown(el.tierDropdownWrapper);
       });
     }
 
@@ -1131,8 +1291,7 @@
     if (el.workoutPillBtn && el.workoutDropdownWrapper) {
       el.workoutPillBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllDropdowns(el.workoutDropdownWrapper);
-        el.workoutDropdownWrapper.classList.toggle('open');
+        toggleFilterDropdown(el.workoutDropdownWrapper);
       });
     }
 
@@ -1140,14 +1299,23 @@
     if (el.amenityPillBtn && el.amenityDropdownWrapper) {
       el.amenityPillBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        closeAllDropdowns(el.amenityDropdownWrapper);
-        el.amenityDropdownWrapper.classList.toggle('open');
+        toggleFilterDropdown(el.amenityDropdownWrapper);
       });
     }
 
+    // Keep dropdown open when interacting with chips/slider
+    document.querySelectorAll('.filter-menu').forEach(m => {
+      m.addEventListener('click', (e) => {
+        if (e.target.closest('.slider-box') || e.target.closest('.filter-chip')) {
+          e.stopPropagation();
+        }
+      });
+    });
+
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.filter-dropdown-wrapper')) {
+      if (!e.target.closest('.filter-dropdown-wrapper') && !e.target.closest('.map-layers-popover') && !e.target.closest('#toggleTileLayerBtn')) {
+        closeAllDropdowns(null);
         closeAllDropdowns(null);
       }
     });
@@ -1192,34 +1360,37 @@
       });
     }
 
-    // Recenter map
+    // Recenter map & My Location
     const recenterAction = () => {
       if (userCoords && map) {
-        map.setView(userCoords, 14, { animate: true });
+        fitMapToRadius(filterState.maxDistance, true);
         if (userMarker) userMarker.openPopup();
       }
     };
     if (el.recenterBtn) el.recenterBtn.addEventListener('click', recenterAction);
-    if (el.mapCenterMeBtn) el.mapCenterMeBtn.addEventListener('click', recenterAction);
-
-    // Fit Bounds
-    if (el.mapFitBoundsBtn) {
-      el.mapFitBoundsBtn.addEventListener('click', () => {
-        if (markerCluster && markerCluster.getLayers().length > 0) {
-          map.fitBounds(markerCluster.getBounds(), { padding: [30, 30], maxZoom: 16 });
-        }
+    if (el.mapCenterMeBtn) {
+      el.mapCenterMeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        requestDeviceLocation(true);
       });
     }
 
-    // Tile Layer Switcher
+    // Fit Bounds (Coverage zone for active distance)
+    if (el.mapFitBoundsBtn) {
+      el.mapFitBoundsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fitMapToRadius(filterState.maxDistance, true);
+      });
+    }
+
+    // Tile Layer Popover Menu Switcher
     if (el.toggleTileLayerBtn) {
-      el.toggleTileLayerBtn.addEventListener('click', () => {
-        if (!map || !tileLayers.length) return;
-        map.removeLayer(tileLayers[currentTileIndex]);
-        currentTileIndex = (currentTileIndex + 1) % tileLayers.length;
-        map.addLayer(tileLayers[currentTileIndex]);
-        const style = TILE_STYLES[currentTileIndex];
-        el.toggleTileLayerBtn.title = `Current Layer: ${style.name} (Click to toggle)`;
+      el.toggleTileLayerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!el.mapLayersMenu) return;
+        const isVis = el.mapLayersMenu.style.display !== 'none';
+        closeAllDropdowns(null);
+        el.mapLayersMenu.style.display = isVis ? 'none' : 'block';
       });
     }
 
@@ -1291,6 +1462,9 @@
     document.querySelectorAll('.filter-dropdown-wrapper').forEach(w => {
       if (w !== except) w.classList.remove('open');
     });
+    if (el.mapLayersMenu && except !== el.mapLayersMenu) {
+      el.mapLayersMenu.style.display = 'none';
+    }
   }
 
   function setDistanceFilter(val) {
@@ -1325,6 +1499,8 @@
     }
 
     applyFilters();
+    fitMapToRadius(val, true);
+    updateUserMarkerPopup();
   }
 
   /**
@@ -1572,9 +1748,17 @@
       marker.bindPopup(popupHtml, { maxWidth: 290, minWidth: 260 });
 
       marker.on('click', () => {
-        highlightStudioCard(studio.id);
         if (window.innerWidth < 900) {
+          // On mobile: suppress balloon popup so only the bottom preview card slides up cleanly
+          setTimeout(() => {
+            if (marker.getPopup() && marker.isPopupOpen()) {
+              marker.closePopup();
+            }
+          }, 10);
           showMobilePreviewCard(studio);
+          map.panTo([studio.lat, studio.lng], { animate: true });
+        } else {
+          highlightStudioCard(studio.id);
         }
       });
 
@@ -1951,6 +2135,10 @@
 
   window.setModalHeroPhoto = function (src) {
     if (el.modalBannerImg) el.modalBannerImg.src = src;
+  };
+
+  window.openLocationSelector = function () {
+    openLocationModal();
   };
 
   window.resetFiltersTrigger = resetAllFilters;
